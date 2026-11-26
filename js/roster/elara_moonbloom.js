@@ -51,6 +51,6 @@ registerCharacterTemplate({
     },
   },
   passives: [
-    { name: 'Lunar Blessing', type: 'battle_start', desc: '+24% Healing/Shield potency and +160 starting TP.' },
+    { name: 'Lunar Blessing', type: 'battle_start', desc: 'Increases own Magic ATK by +20% at the start of battle.' },
   ],
 });

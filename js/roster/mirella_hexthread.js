@@ -52,6 +52,6 @@ registerCharacterTemplate({
     },
   },
   passives: [
-    { name: 'Temporal Resonance', type: 'battle_start', desc: '+12% Action Speed and +120 starting TP.' },
+    { name: 'Temporal Resonance', type: 'battle_start', desc: 'Increases own Magic ATK by +20% at the start of battle.' },
   ],
 });

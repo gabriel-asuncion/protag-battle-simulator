@@ -54,6 +54,6 @@ registerCharacterTemplate({
     },
   },
   passives: [
-    { name: 'Valkyrie Zeal', type: 'battle_start', desc: '+16% Physical ATK and +10% Crit Rate at battle start.' },
+    { name: 'Valkyrie Zeal', type: 'battle_start', desc: 'Increases own Physical ATK by +20% at the start of battle.' },
   ],
 });

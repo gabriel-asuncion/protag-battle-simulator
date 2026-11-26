@@ -53,6 +53,6 @@ registerCharacterTemplate({
     },
   },
   passives: [
-    { name: 'Starborn Grace', type: 'battle_start', desc: '+16% Magical ATK and +160 starting TP.' },
+    { name: 'Starborn Grace', type: 'battle_start', desc: 'Increases own Magic Defense by +30% at the start of battle.' },
   ],
 });

@@ -53,6 +53,6 @@ registerCharacterTemplate({
     },
   },
   passives: [
-    { name: 'Solar Core', type: 'battle_start', desc: '+22% Magical ATK and +15% Crit Damage at battle start.' },
+    { name: 'Solar Core', type: 'battle_start', desc: 'Increases own Magic ATK by +22% at the start of battle.' },
   ],
 });

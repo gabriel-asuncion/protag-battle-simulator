@@ -52,6 +52,6 @@ registerCharacterTemplate({
     },
   },
   passives: [
-    { name: 'Rime Sight', type: 'battle_start', desc: '+16% Physical ATK and +14% Crit Rate at battle start.' },
+    { name: 'Rime Sight', type: 'battle_start', desc: 'Increases own Physical ATK by +22% at the start of battle.' },
   ],
 });

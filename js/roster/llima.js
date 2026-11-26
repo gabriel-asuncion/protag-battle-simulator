@@ -8,7 +8,7 @@ registerCharacterTemplate({
   delayedEntry: true,
   spriteGrid: { row: 1, col: 0 },
   damageType: 'physical',
-  kitFormat: '1 UB • 2 Auto Skills',
+  kitFormat: '1 UB • 2 Auto Skills • 1 Passive',
   stats: {
     maxHp: 3820,
     patk: 215,
@@ -66,5 +66,11 @@ registerCharacterTemplate({
       baseHitTp: 112,
     },
   },
-  passives: [],
+  passives: [
+    {
+      name: 'Woolly Guard',
+      type: 'battle_start',
+      desc: 'Increases own Physical Defense by +30% at the start of battle.',
+    },
+  ],
 });

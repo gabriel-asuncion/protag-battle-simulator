@@ -51,6 +51,8 @@ function createCombatUnit(templateId, side, slotIndex, customZoneOverride = null
     hp: tpl.stats.maxHp,
     shield: 0,
     magicShield: 0,
+    physicalShield: 0,
+    physicalShield: 0,
     patk: tpl.stats.patk,
     matk: tpl.stats.matk,
     pdef: tpl.stats.pdef,
@@ -103,58 +105,43 @@ function createCombatUnit(templateId, side, slotIndex, customZoneOverride = null
   for (const p of unit.passives) {
     if (p.type === 'battle_start') {
       if (unit.templateId === 'bram_ironclad') {
-        unit.buffs.push({ type: 'defUp', val: 0.25, remaining: 999 });
-        gainTp(unit, 140, 'Bastion Stance');
+        unit.buffs.push({ type: 'pdefUp', val: 0.30, remaining: 999 });
       } else if (unit.templateId === 'kaelen_ashblade') {
-        unit.buffs.push({ type: 'atkUp', val: 0.18, remaining: 999 });
-        unit.critRate += 0.12;
+        unit.buffs.push({ type: 'patkUp', val: 0.22, remaining: 999 });
       } else if (unit.templateId === 'vespera_nightstep') {
-        unit.buffs.push({ type: 'haste', val: 0.14, remaining: 999 });
-        unit.critRate += 0.10;
+        unit.buffs.push({ type: 'patkUp', val: 0.22, remaining: 999 });
       } else if (unit.templateId === 'sylas_sunweaver') {
-        unit.buffs.push({ type: 'matkUp', val: 0.15, remaining: 999 });
-        gainTp(unit, 180, 'Aether Conduit');
+        unit.buffs.push({ type: 'mdefUp', val: 0.30, remaining: 999 });
       } else if (unit.templateId === 'mirella_hexthread') {
-        unit.buffs.push({ type: 'haste', val: 0.12, remaining: 999 });
-        gainTp(unit, 120, 'Temporal Resonance');
-      } else if (unit.templateId === 'orin_pyrecaster') {
         unit.buffs.push({ type: 'matkUp', val: 0.20, remaining: 999 });
-        unit.critMult += 0.15;
+      } else if (unit.templateId === 'orin_pyrecaster') {
+        unit.buffs.push({ type: 'matkUp', val: 0.22, remaining: 999 });
       } else if (unit.templateId === 'lyra_windpiercer') {
-        unit.buffs.push({ type: 'patkUp', val: 0.15, remaining: 999 });
-        unit.critRate += 0.12;
+        unit.buffs.push({ type: 'patkUp', val: 0.22, remaining: 999 });
       } else if (unit.templateId === 'talia_dewsong') {
-        unit.buffs.push({ type: 'healUp', val: 0.22, remaining: 999 });
-        gainTp(unit, 150, false);
+        unit.buffs.push({ type: 'matkUp', val: 0.20, remaining: 999 });
       } else if (unit.templateId === 'garrick_stoneguard') {
-        unit.buffs.push({ type: 'defUp', val: 0.28, remaining: 999 });
-        gainTp(unit, 130, false);
+        unit.buffs.push({ type: 'pdefUp', val: 0.30, remaining: 999 });
       } else if (unit.templateId === 'seraphina_dawnblade') {
-        unit.buffs.push({ type: 'patkUp', val: 0.16, remaining: 999 });
-        unit.critRate += 0.10;
+        unit.buffs.push({ type: 'patkUp', val: 0.20, remaining: 999 });
       } else if (unit.templateId === 'zephyr_shadowstep') {
-        unit.buffs.push({ type: 'haste', val: 0.16, remaining: 999 });
-        unit.critRate += 0.12;
+        unit.buffs.push({ type: 'patkUp', val: 0.22, remaining: 999 });
       } else if (unit.templateId === 'aurelia_starcaller') {
-        unit.buffs.push({ type: 'matkUp', val: 0.16, remaining: 999 });
-        gainTp(unit, 160, false);
+        unit.buffs.push({ type: 'mdefUp', val: 0.30, remaining: 999 });
       } else if (unit.templateId === 'corvus_voidweaver') {
-        unit.buffs.push({ type: 'haste', val: 0.14, remaining: 999 });
-        gainTp(unit, 130, false);
+        unit.buffs.push({ type: 'matkUp', val: 0.20, remaining: 999 });
       } else if (unit.templateId === 'ignis_emberheart') {
         unit.buffs.push({ type: 'matkUp', val: 0.22, remaining: 999 });
-        unit.critMult += 0.15;
       } else if (unit.templateId === 'sylvia_frostbow') {
-        unit.buffs.push({ type: 'patkUp', val: 0.16, remaining: 999 });
-        unit.critRate += 0.14;
+        unit.buffs.push({ type: 'patkUp', val: 0.22, remaining: 999 });
       } else if (unit.templateId === 'elara_moonbloom') {
-        unit.buffs.push({ type: 'healUp', val: 0.24, remaining: 999 });
-        gainTp(unit, 160, false);
+        unit.buffs.push({ type: 'matkUp', val: 0.20, remaining: 999 });
       } else if (unit.templateId === 'yukari') {
         unit.buffs.push({ type: 'mdefUp', val: 0.32, remaining: 999 });
+      } else if (unit.templateId === 'llima') {
+        unit.buffs.push({ type: 'pdefUp', val: 0.30, remaining: 999 });
       } else if (unit.templateId === 'ninon') {
         unit.buffs.push({ type: 'patkUp', val: 0.20, remaining: 999 });
-        unit.critRate += 0.10;
       } else if (unit.templateId === 'nozomi') {
         unit.buffs.push({ type: 'pdefUp', val: 0.30, remaining: 999 });
       } else if (unit.templateId === 'tamaki') {
@@ -915,9 +902,14 @@ function dealDamage(attacker, defender, rawMultiplier, damageType, options = {})
     defender.magicShield -= magicAbsorbed;
     absorbed += magicAbsorbed;
   }
-  const remainingAfterMagic = Math.max(0, mitigatedDmg - absorbed);
-  if (defender.shield > 0 && remainingAfterMagic > 0) {
-    const generalAbsorbed = Math.min(defender.shield, remainingAfterMagic);
+  if (damageType === 'physical' && defender.physicalShield > 0) {
+    const physAbsorbed = Math.min(defender.physicalShield, mitigatedDmg);
+    defender.physicalShield -= physAbsorbed;
+    absorbed += physAbsorbed;
+  }
+  const remainingAfterTyped = Math.max(0, mitigatedDmg - absorbed);
+  if (defender.shield > 0 && remainingAfterTyped > 0) {
+    const generalAbsorbed = Math.min(defender.shield, remainingAfterTyped);
     defender.shield -= generalAbsorbed;
     absorbed += generalAbsorbed;
   }
@@ -1012,6 +1004,24 @@ function grantMagicShield(caster, target, amount) {
   target.magicShield += finalShield;
   caster.statsTracked.shieldGranted += finalShield;
   spawnPopup(target, `+${finalShield} M.WARD`, 'pcrd-num-shield font-mono-num text-lg sm:text-xl', -28);
+}
+
+function grantPhysicalShield(caster, target, amount) {
+  if (!target || !target.alive) return;
+  const eff = getEffectiveStats(caster);
+  const finalShield = Math.max(25, Math.round(amount * eff.healMult));
+  target.physicalShield += finalShield;
+  caster.statsTracked.shieldGranted += finalShield;
+  spawnPopup(target, `+${finalShield} P.WARD`, 'pcrd-num-shield font-mono-num text-lg sm:text-xl', -28);
+}
+
+function grantPhysicalShield(caster, target, amount) {
+  if (!target || !target.alive) return;
+  const eff = getEffectiveStats(caster);
+  const finalShield = Math.max(25, Math.round(amount * eff.healMult));
+  target.physicalShield += finalShield;
+  caster.statsTracked.shieldGranted += finalShield;
+  spawnPopup(target, `+${finalShield} P.WARD`, 'pcrd-num-shield font-mono-num text-lg sm:text-xl', -28);
 }
 
 function triggerUnionBurst(unit) {

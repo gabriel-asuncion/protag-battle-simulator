@@ -454,6 +454,19 @@ function renderArena() {
     const koRotDeg = -28 * dirSign;
     const spriteStyleVars = `--windup-x:${-7 * dirSign}px; --windup-rot:${-9 * dirSign}deg; --strike-x:${16 * dirSign}px; --strike-rot:${12 * dirSign}deg; --recoil-x:${-10 * dirSign}px; --recoil-rot:${-8 * dirSign}deg; --kb-x:${-15 * dirSign}px; --kb-rot:${-12 * dirSign}deg; --ko-rot:${koRotDeg}deg;`;
 
+    const univShield = Math.max(0, u.shield || 0);
+    const magicShield = Math.max(0, u.magicShield || 0);
+    const physShield = Math.max(0, u.physicalShield || 0);
+    const totalShield = univShield + magicShield + physShield;
+    const shieldDomeClass =
+      totalShield <= 0
+        ? ''
+        : magicShield >= physShield && magicShield >= univShield && magicShield > 0
+        ? 'is-magic'
+        : physShield >= univShield && physShield > 0
+        ? 'is-physical'
+        : 'is-universal';
+
     // Borderless close-up chibi character sprite grounded on the stone arena floor
     spriteNode.innerHTML = `
       <div class="chibi-closeup-sprite relative flex flex-col items-center justify-center ${
@@ -464,6 +477,7 @@ function renderArena() {
         <div class="${animClass}" data-sprite-vars="${spriteStyleVars}">
           ${renderCharacterSpriteSVG(u, battle.ended && u.alive)}
         </div>
+        ${u.alive && totalShield > 0 ? `<div class="unit-shield-bubble ${shieldDomeClass}"></div>` : ''}
         <div class="unit-ground-shadow"></div>
       </div>
     `;
@@ -517,7 +531,21 @@ function renderUbDeck() {
 
   deck.innerHTML = playerUnits
     .map((u, idx) => {
-      const hpPct = Math.max(0, Math.min(100, (u.hp / u.maxHp) * 100));
+      const curHp = Math.max(0, u.hp);
+      const univShield = Math.max(0, u.shield || 0);
+      const magicShield = Math.max(0, u.magicShield || 0);
+      const physShield = Math.max(0, u.physicalShield || 0);
+      const totalShield = univShield + magicShield + physShield;
+      const barCap = Math.max(u.maxHp, curHp + totalShield);
+      const hpPct = Math.max(0, Math.min(100, (curHp / barCap) * 100));
+      const univPct = Math.max(0, Math.min(100 - hpPct, (univShield / barCap) * 100));
+      const magicPct = Math.max(0, Math.min(100 - hpPct - univPct, (magicShield / barCap) * 100));
+      const physPct = Math.max(0, Math.min(100 - hpPct - univPct - magicPct, (physShield / barCap) * 100));
+      const hpTooltip = `HP: ${Math.ceil(curHp)}/${u.maxHp}${
+        univShield > 0 ? ` • Universal Shield: ${Math.ceil(univShield)}` : ''
+      }${magicShield > 0 ? ` • Magic Shield: ${Math.ceil(magicShield)}` : ''}${
+        physShield > 0 ? ` • Physical Shield: ${Math.ceil(physShield)}` : ''
+      }`;
       const tpPct = Math.max(0, Math.min(100, (u.tp / MAX_TP) * 100));
       const actPct = getUnifiedActionBarPct(u);
       const ready = u.alive && u.tp >= MAX_TP && battle.running && !battle.ended;
@@ -537,9 +565,12 @@ function renderUbDeck() {
               ${renderCharacterHeadSprite(u)}
             </div>
             ${ready ? `<span class="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-amber-300 text-slate-950 font-extrabold text-[9px] shadow">UB</span>` : ''}
-          </button>          <!-- HP Bar -->
-          <div class="w-20 sm:w-24 h-2.5 rounded-full bg-slate-900/95 border border-slate-700 overflow-hidden p-[1px]">
-            <div class="h-full rounded-full bg-lime-400 transition-all duration-100" data-ub-hp="${hpPct.toFixed(1)}%"></div>
+          </button>          <!-- HP Bar + Color-Coded Shield Segments (Gray: Universal, Purple: Magic, Maroon: Physical) -->
+          <div title="${hpTooltip}" class="w-20 sm:w-24 h-2.5 rounded-full bg-slate-900/95 border border-slate-700 overflow-hidden p-[1px] flex items-center">
+            <div class="h-full bg-lime-400 transition-all duration-100 shrink-0 ${totalShield <= 0 ? 'rounded-full' : 'rounded-l-full'}" data-ub-hp="${hpPct.toFixed(1)}%"></div>
+            ${univPct > 0 ? `<div class="h-full shield-seg-universal transition-all duration-100 shrink-0 ${magicPct <= 0 && physPct <= 0 ? 'rounded-r-full' : ''}" data-ub-shield="${univPct.toFixed(1)}%"></div>` : ''}
+            ${magicPct > 0 ? `<div class="h-full shield-seg-magic transition-all duration-100 shrink-0 ${physPct <= 0 ? 'rounded-r-full' : ''}" data-ub-shield="${magicPct.toFixed(1)}%"></div>` : ''}
+            ${physPct > 0 ? `<div class="h-full shield-seg-physical rounded-r-full transition-all duration-100 shrink-0" data-ub-shield="${physPct.toFixed(1)}%"></div>` : ''}
           </div>
           <!-- TP Bar -->
           <div class="w-20 sm:w-24 h-2.5 rounded-full bg-slate-900/95 border border-slate-700 overflow-hidden p-[1px]">
@@ -556,6 +587,9 @@ function renderUbDeck() {
 
   deck.querySelectorAll('[data-ub-hp]').forEach((el) => {
     el.style.width = el.getAttribute('data-ub-hp') || '0%';
+  });
+  deck.querySelectorAll('[data-ub-shield]').forEach((el) => {
+    el.style.width = el.getAttribute('data-ub-shield') || '0%';
   });
   deck.querySelectorAll('[data-ub-tp]').forEach((el) => {
     el.style.width = el.getAttribute('data-ub-tp') || '0%';
@@ -596,6 +630,17 @@ function renderUnitInspector() {
       </div>
       <div class="text-right font-mono-num text-[11px]">
         <div class="text-emerald-300 font-bold">${Math.ceil(unit.hp)} / ${unit.maxHp} HP</div>
+        ${
+          (unit.shield || 0) + (unit.magicShield || 0) + (unit.physicalShield || 0) > 0
+            ? `<div class="text-[10px] font-bold text-slate-200">${
+                unit.shield > 0 ? `<span class="text-gray-300">U:${Math.ceil(unit.shield)}</span> ` : ''
+              }${
+                unit.magicShield > 0 ? `<span class="text-purple-300">M:${Math.ceil(unit.magicShield)}</span> ` : ''
+              }${
+                unit.physicalShield > 0 ? `<span class="text-rose-400">P:${Math.ceil(unit.physicalShield)}</span>` : ''
+              }</div>`
+            : ''
+        }
         <div class="text-amber-300 font-bold">${Math.floor(unit.tp)} / ${MAX_TP} TP</div>
       </div>
     </div>

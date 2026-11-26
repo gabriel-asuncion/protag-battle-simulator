@@ -52,6 +52,6 @@ registerCharacterTemplate({
     },
   },
   passives: [
-    { name: 'Springtide Grace', type: 'battle_start', desc: '+22% Healing/Shield potency and +150 starting TP.' },
+    { name: 'Springtide Grace', type: 'battle_start', desc: 'Increases own Magic ATK by +20% at the start of battle.' },
   ],
 });

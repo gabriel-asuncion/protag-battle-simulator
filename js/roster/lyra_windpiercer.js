@@ -5,7 +5,7 @@ registerCharacterTemplate({
   positionZone: 'rearguard',
   spriteGrid: { row: 3, col: 0 },
   damageType: 'physical',
-  kitFormat: '1 UB • 1 Auto Skill • 2 Passives',
+  kitFormat: '1 UB • 1 Auto Skill • 1 Passive',
   stats: { maxHp: 2150, patk: 345, matk: 85, pdef: 125, mdef: 145, actionSpeed: 1.12, critRate: 0.25, critMult: 1.75, tpGainRate: 1.05 },
   openingLoop: ['auto', 'skill1'],
   mainLoop: ['auto', 'auto', 'skill1'],
@@ -41,7 +41,6 @@ registerCharacterTemplate({
     },
   },
   passives: [
-    { name: 'Hawkeye Focus', type: 'battle_start', desc: '+15% Physical ATK and +12% Crit Rate.' },
-    { name: 'Tailwind Quiver', type: 'periodic_aura', desc: 'Every ~6.5s, gains +10% Action Speed surge and +70 TP.' },
+    { name: 'Hawkeye Focus', type: 'battle_start', desc: 'Increases own Physical ATK by +22% at the start of battle.' },
   ],
 });

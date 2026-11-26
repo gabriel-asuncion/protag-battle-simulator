@@ -5,7 +5,7 @@ registerCharacterTemplate({
   positionZone: 'center',
   spriteGrid: { row: 1, col: 1 },
   damageType: 'magical',
-  kitFormat: '1 UB • 1 Auto Skill • 2 Passives',
+  kitFormat: '1 UB • 1 Auto Skill • 1 Passive',
   stats: { maxHp: 2800, patk: 110, matk: 285, pdef: 175, mdef: 185, actionSpeed: 1.00, critRate: 0.14, critMult: 1.55, tpGainRate: 1.10 },
   openingLoop: ['auto', 'skill1', 'auto'],
   mainLoop: ['auto', 'auto', 'skill1', 'auto'],
@@ -42,7 +42,6 @@ registerCharacterTemplate({
     },
   },
   passives: [
-    { name: 'Aether Conduit', type: 'battle_start', desc: 'Starts with +180 TP and +15% Magical ATK.' },
-    { name: 'Solar Blessing', type: 'periodic_aura', desc: 'Every ~6s of combat, pulses +75 TP and minor ward to frontline/lowest ally.' },
+    { name: 'Aether Conduit', type: 'battle_start', desc: 'Increases own Magic Defense by +30% at the start of battle.' },
   ],
 });

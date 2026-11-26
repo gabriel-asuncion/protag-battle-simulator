@@ -70,7 +70,7 @@ registerCharacterTemplate({
     {
       name: 'Crimson Fanfare',
       type: 'battle_start',
-      desc: 'Increases own Physical ATK by +20% and Crit Rate by +10% at the start of battle.',
+      desc: 'Increases own Physical ATK by +20% at the start of battle.',
     },
   ],
 });

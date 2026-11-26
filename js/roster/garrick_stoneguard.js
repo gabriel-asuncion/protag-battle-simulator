@@ -55,6 +55,6 @@ registerCharacterTemplate({
     },
   },
   passives: [
-    { name: 'Bedrock Ward', type: 'battle_start', desc: 'Starts battle with +28% Physical DEF and +130 starting TP.' },
+    { name: 'Bedrock Ward', type: 'battle_start', desc: 'Increases own Physical Defense by +30% at the start of battle.' },
   ],
 });

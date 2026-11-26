@@ -125,6 +125,126 @@ body {
   pointer-events: none;
 }
 
+@keyframes shieldDomePulse {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.88;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.04);
+    opacity: 1;
+  }
+}
+
+.unit-shield-bubble {
+  position: absolute;
+  left: 50%;
+  top: 48%;
+  width: 118px;
+  height: 118px;
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 4;
+  animation: shieldDomePulse 2.1s ease-in-out infinite;
+}
+
+@media (min-width: 640px) {
+  .unit-shield-bubble {
+    width: 142px;
+    height: 142px;
+  }
+}
+
+.unit-shield-bubble.is-universal {
+  background: radial-gradient(circle at 35% 30%, rgba(226, 232, 240, 0.34) 0%, rgba(156, 163, 175, 0.24) 62%, rgba(107, 114, 128, 0.42) 100%);
+  border: 2px solid rgba(209, 213, 219, 0.85);
+  box-shadow: 0 0 16px rgba(156, 163, 175, 0.55), inset 0 0 14px rgba(243, 244, 246, 0.35);
+}
+
+.unit-shield-bubble.is-magic {
+  background: radial-gradient(circle at 35% 30%, rgba(233, 213, 255, 0.36) 0%, rgba(168, 85, 247, 0.25) 62%, rgba(126, 34, 206, 0.45) 100%);
+  border: 2px solid rgba(216, 180, 254, 0.9);
+  box-shadow: 0 0 18px rgba(168, 85, 247, 0.65), inset 0 0 14px rgba(243, 232, 255, 0.35);
+}
+
+.unit-shield-bubble.is-physical {
+  background: radial-gradient(circle at 35% 30%, rgba(254, 205, 211, 0.32) 0%, rgba(136, 19, 55, 0.28) 62%, rgba(127, 29, 29, 0.48) 100%);
+  border: 2px solid rgba(244, 63, 94, 0.82);
+  box-shadow: 0 0 18px rgba(159, 18, 57, 0.65), inset 0 0 14px rgba(255, 228, 230, 0.28);
+}
+
+.shield-seg-universal {
+  background-color: #9ca3af;
+}
+
+.shield-seg-magic {
+  background-color: #a855f7;
+}
+
+.shield-seg-physical {
+  background-color: #881337;
+}
+
+@keyframes shieldDomePulse {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.88;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.04);
+    opacity: 1;
+  }
+}
+
+.unit-shield-bubble {
+  position: absolute;
+  left: 50%;
+  top: 48%;
+  width: 118px;
+  height: 118px;
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 4;
+  animation: shieldDomePulse 2.1s ease-in-out infinite;
+}
+
+@media (min-width: 640px) {
+  .unit-shield-bubble {
+    width: 142px;
+    height: 142px;
+  }
+}
+
+.unit-shield-bubble.is-universal {
+  background: radial-gradient(circle at 35% 30%, rgba(226, 232, 240, 0.34) 0%, rgba(156, 163, 175, 0.24) 62%, rgba(107, 114, 128, 0.42) 100%);
+  border: 2px solid rgba(209, 213, 219, 0.85);
+  box-shadow: 0 0 16px rgba(156, 163, 175, 0.55), inset 0 0 14px rgba(243, 244, 246, 0.35);
+}
+
+.unit-shield-bubble.is-magic {
+  background: radial-gradient(circle at 35% 30%, rgba(233, 213, 255, 0.36) 0%, rgba(168, 85, 247, 0.25) 62%, rgba(126, 34, 206, 0.45) 100%);
+  border: 2px solid rgba(216, 180, 254, 0.9);
+  box-shadow: 0 0 18px rgba(168, 85, 247, 0.65), inset 0 0 14px rgba(243, 232, 255, 0.35);
+}
+
+.unit-shield-bubble.is-physical {
+  background: radial-gradient(circle at 35% 30%, rgba(254, 205, 211, 0.32) 0%, rgba(136, 19, 55, 0.28) 62%, rgba(127, 29, 29, 0.48) 100%);
+  border: 2px solid rgba(244, 63, 94, 0.82);
+  box-shadow: 0 0 18px rgba(159, 18, 57, 0.65), inset 0 0 14px rgba(255, 228, 230, 0.28);
+}
+
+.shield-seg-universal {
+  background-color: #9ca3af;
+}
+
+.shield-seg-magic {
+  background-color: #a855f7;
+}
+
+.shield-seg-physical {
+  background-color: #881337;
+}
+
 @keyframes floatUpFade {
   0% {
     opacity: 0;

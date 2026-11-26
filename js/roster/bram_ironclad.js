@@ -55,6 +55,6 @@ registerCharacterTemplate({
     },
   },
   passives: [
-    { name: 'Bastion Stance', type: 'battle_start', desc: 'Starts battle with +25% Physical DEF and 140 starting TP.' },
+    { name: 'Bastion Stance', type: 'battle_start', desc: 'Increases own Physical Defense by +30% at the start of battle.' },
   ],
 });

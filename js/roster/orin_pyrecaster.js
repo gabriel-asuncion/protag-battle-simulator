@@ -53,6 +53,6 @@ registerCharacterTemplate({
     },
   },
   passives: [
-    { name: 'Pyromania', type: 'battle_start', desc: '+20% Magical ATK and +15% Crit Damage.' },
+    { name: 'Pyromania', type: 'battle_start', desc: 'Increases own Magic ATK by +22% at the start of battle.' },
   ],
 });

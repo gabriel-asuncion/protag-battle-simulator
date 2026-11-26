@@ -52,6 +52,6 @@ registerCharacterTemplate({
     },
   },
   passives: [
-    { name: 'Phantom Step', type: 'battle_start', desc: '+16% Action Speed and +12% Crit Rate at battle start.' },
+    { name: 'Phantom Step', type: 'battle_start', desc: 'Increases own Physical ATK by +22% at the start of battle.' },
   ],
 });

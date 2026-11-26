@@ -5,7 +5,7 @@ registerCharacterTemplate({
   positionZone: 'frontline',
   spriteGrid: { row: 0, col: 1 },
   damageType: 'physical',
-  kitFormat: '1 UB • 1 Auto Skill • 2 Passives',
+  kitFormat: '1 UB • 1 Auto Skill • 1 Passive',
   stats: { maxHp: 2550, patk: 315, matk: 90, pdef: 150, mdef: 120, actionSpeed: 1.06, critRate: 0.22, critMult: 1.65, tpGainRate: 1.05 },
   openingLoop: ['auto', 'skill1'],
   mainLoop: ['auto', 'auto', 'skill1'],
@@ -42,7 +42,6 @@ registerCharacterTemplate({
     },
   },
   passives: [
-    { name: 'Dusk Momentum', type: 'battle_start', desc: 'Grants +18% Physical ATK and +12% Crit Rate from the start of combat.' },
-    { name: 'Bloodied Fury', type: 'on_hit_taken', desc: 'Taking heavy damage grants +12% ATK stack (up to 3) and extra TP.' },
+    { name: 'Dusk Momentum', type: 'battle_start', desc: 'Increases own Physical ATK by +22% at the start of battle.' },
   ],
 });

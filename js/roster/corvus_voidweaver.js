@@ -53,6 +53,6 @@ registerCharacterTemplate({
     },
   },
   passives: [
-    { name: 'Void Echo', type: 'battle_start', desc: '+14% Action Speed and +130 starting TP.' },
+    { name: 'Void Echo', type: 'battle_start', desc: 'Increases own Magic ATK by +20% at the start of battle.' },
   ],
 });

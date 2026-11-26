@@ -52,6 +52,6 @@ registerCharacterTemplate({
     },
   },
   passives: [
-    { name: 'Rift Reflexes', type: 'battle_start', desc: '+14% Action Speed and +10% Crit Rate at battle start.' },
+    { name: 'Rift Reflexes', type: 'battle_start', desc: 'Increases own Physical ATK by +22% at the start of battle.' },
   ],
 });
