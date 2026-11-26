@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aetherion Crest — PCRD Auto-Battler Simulator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="min-h-screen flex flex-col bg-slate-950 text-slate-50 selection:bg-amber-400 selection:text-slate-950 overflow-x-hidden">
+  <!-- Compact Top Navigation for Lobby / Drafting (Shown on non-battle pages) -->
+  <header id="non-battle-header" class="hidden border-b border-slate-800/90 bg-slate-950/90 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-[1440px] mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-rose-600 flex items-center justify-center text-slate-950 font-extrabold shadow-lg">
+          AC
+        </div>
+        <div>
+          <h1 class="font-display text-base sm:text-lg font-extrabold tracking-wide text-amber-300 leading-tight">
+            AETHERION CREST
+          </h1>
+          <p class="text-[11px] text-slate-400">PCRD Auto-Battler • Lobby &amp; Squad Drafting</p>
+        </div>
+      </div>
+
+      <nav class="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800">
+        <button data-page="lobby" class="page-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white">
+          Lobby
+        </button>
+        <button data-page="draft" class="page-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white">
+          Drafting
+        </button>
+        <button data-page="battle" class="page-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-400 text-slate-950">
+          Battle
+        </button>
+      </nav>
+
+      <div class="flex items-center gap-2">
+        <button id="open-codex-btn-alt" class="open-codex-trigger px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700">
+          Roster &amp; Kits (8)
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- VIEW 1: LOBBY PAGE -->
+  <section id="lobby-view" class="hidden flex-1 max-w-[1280px] w-full mx-auto p-4 sm:p-6 flex-col gap-6">
+    <div class="arena-bg rounded-3xl border border-slate-800 p-6 sm:p-8 shadow-2xl flex flex-col lg:flex-row items-center justify-between gap-6">
+      <div class="max-w-2xl space-y-3">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider bg-amber-400/15 text-amber-300 border border-amber-400/30">
+          PCRD-Style Auto-Battler
+        </div>
+        <h2 class="font-display text-2xl sm:text-4xl font-extrabold text-white leading-tight">
+          Command Your Chibi Squad in Full-Screen Combat
+        </h2>
+        <p class="text-xs sm:text-sm text-slate-300 leading-relaxed">
+          Clean full-screen battle stage with bottom Union Burst portrait deck, AUTO toggle, Fast-Forward speed control, and a quick MENU overlay.
+        </p>
+        <div class="flex flex-wrap items-center gap-3 pt-2">
+          <button id="lobby-go-draft-btn" class="px-5 py-2.5 rounded-xl text-sm font-extrabold bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-lg transition">
+            Enter Drafting Phase →
+          </button>
+          <button id="lobby-quick-battle-btn" class="px-4 py-2.5 rounded-xl text-sm font-bold bg-slate-800 hover:bg-slate-700 text-sky-200 border border-slate-700 transition">
+            Start Battle
+          </button>
+          <button id="lobby-quick-dummy-btn" class="px-4 py-2.5 rounded-xl text-sm font-bold bg-slate-800 hover:bg-slate-700 text-emerald-200 border border-slate-700 transition">
+            Training Dummy
+          </button>
+        </div>
+      </div>
+
+      <div id="lobby-showcase-sprites" class="grid grid-cols-3 gap-2.5 w-full lg:w-auto shrink-0"></div>
+    </div>
+  </section>
+
+  <!-- VIEW 2: ASSEMBLE PARTY DRAFTING MODAL (PCRD Style) -->
+  <section id="draft-view" class="hidden flex-1 w-full max-w-[1180px] mx-auto p-3 sm:p-5 flex-col justify-center">
+    <div class="pcrd-draft-shell rounded-3xl overflow-hidden shadow-2xl border-2 border-amber-300/90 bg-slate-50 text-slate-900 flex flex-col">
+      <!-- Top Blue Header Bar -->
+      <div class="pcrd-draft-header px-5 py-2.5 flex items-center justify-between text-white">
+        <div class="w-24 hidden sm:block"></div>
+        <h2 class="font-display text-lg sm:text-xl font-extrabold tracking-wide drop-shadow">Assemble Party</h2>
+        <div class="flex items-center gap-1.5 bg-slate-950/35 p-1 rounded-xl border border-white/25">
+          <button id="draft-mode-4v4-btn" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-300 text-slate-950">4v4</button>
+          <button id="draft-mode-dummy-btn" class="px-2.5 py-1 rounded-lg text-[11px] font-bold text-white/90 hover:text-white">Dummy</button>
+        </div>
+      </div>
+
+      <!-- Opponent's Party Row -->
+      <div class="px-4 sm:px-6 py-3 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div>
+            <div id="enemy-builder-label" class="text-sm font-extrabold text-slate-700">Opponent's Party</div>
+            <div class="flex items-center gap-2 mt-1">
+              <span class="px-2 py-0.5 rounded bg-sky-500 text-white text-[10px] font-extrabold uppercase tracking-wide">Party Power</span>
+              <span id="enemy-party-power" class="font-mono-num text-sm font-extrabold text-slate-800">0</span>
+            </div>
+          </div>
+          <select id="dummy-count-select" class="hidden bg-slate-100 border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-800">
+            <option value="1">1 Dummy</option>
+            <option value="2">2 Dummies</option>
+            <option value="4" selected>4 Dummies</option>
+          </select>
+        </div>
+        <div id="enemy-team-builder" class="flex items-center gap-2 sm:gap-2.5 flex-wrap"></div>
+      </div>
+
+      <!-- Filter & Preset Bar -->
+      <div class="px-4 sm:px-6 py-2.5 bg-slate-100 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <button data-draft-filter="all" class="draft-filter-btn px-3.5 py-1 rounded-full text-xs font-extrabold bg-blue-600 text-white shadow-sm">All</button>
+          <button data-draft-filter="front" class="draft-filter-btn px-3.5 py-1 rounded-full text-xs font-extrabold bg-white text-slate-700 border border-slate-300 hover:bg-slate-50">Front</button>
+          <button data-draft-filter="middle" class="draft-filter-btn px-3.5 py-1 rounded-full text-xs font-extrabold bg-white text-slate-700 border border-slate-300 hover:bg-slate-50">Middle</button>
+          <button data-draft-filter="back" class="draft-filter-btn px-3.5 py-1 rounded-full text-xs font-extrabold bg-white text-slate-700 border border-slate-300 hover:bg-slate-50">Back</button>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="preset-balanced-btn" class="px-3 py-1 rounded-full text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-xs">
+            Balanced
+          </button>
+          <button id="preset-rush-btn" class="px-3 py-1 rounded-full text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-xs">
+            Aggro Dive
+          </button>
+        </div>
+      </div>
+
+      <!-- Roster Portrait Grid -->
+      <div class="px-4 sm:px-6 py-4 bg-white">
+        <div id="draft-roster-cards" class="grid grid-cols-4 sm:grid-cols-8 gap-2.5 sm:gap-3"></div>
+      </div>
+
+      <!-- Bottom Current Party & Action Buttons -->
+      <div class="px-4 sm:px-6 py-3.5 bg-slate-100 border-t border-slate-200 flex flex-col lg:flex-row items-center justify-between gap-4">
+        <div class="w-full lg:w-auto">
+          <div class="flex items-center justify-between sm:justify-start gap-3 mb-2">
+            <span class="text-xs sm:text-sm font-extrabold text-slate-700">♦ Current Party <span class="text-[11px] font-semibold text-slate-500">(Back ← → Front)</span></span>
+            <div class="flex items-center gap-1.5">
+              <span class="px-2 py-0.5 rounded bg-sky-500 text-white text-[10px] font-extrabold uppercase">Party Power</span>
+              <span id="player-party-power" class="font-mono-num text-sm font-extrabold text-slate-800">0</span>
+            </div>
+          </div>
+          <div id="player-team-builder" class="flex items-center gap-2.5 flex-wrap"></div>
+        </div>
+
+        <div class="flex items-center gap-3 shrink-0 w-full lg:w-auto justify-end">
+          <button id="draft-cancel-btn" class="px-6 py-2.5 rounded-xl font-extrabold text-sm bg-white hover:bg-slate-50 text-slate-700 border-2 border-slate-300 shadow transition">
+            Cancel
+          </button>
+          <button id="draft-launch-battle-btn" class="pcrd-next-btn px-7 py-2.5 rounded-xl font-extrabold text-sm text-white shadow-lg hover:brightness-105 active:scale-95 transition">
+            Begin Battle
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- VIEW 3: FULL-SCREEN PCRD BATTLE STAGE -->
+  <main id="battle-view" class="relative w-screen h-screen overflow-hidden select-none arena-bg flex flex-col justify-between">
+    <!-- Subtle Zone Grid Behind Characters -->
+    <div class="pointer-events-none absolute inset-0 grid grid-cols-7 opacity-25 z-0">
+      <div class="border-r border-sky-300/20 h-full"></div>
+      <div class="border-r border-sky-300/20 h-full"></div>
+      <div class="border-r border-cyan-300/20 h-full"></div>
+      <div class="border-r border-amber-300/20 h-full"></div>
+      <div class="border-r border-purple-300/20 h-full"></div>
+      <div class="border-r border-rose-300/20 h-full"></div>
+      <div class="h-full"></div>
+    </div>
+
+    <!-- Ground / Battlefield Terrain -->
+    <div class="arena-floor pointer-events-none absolute inset-x-0 bottom-0 h-[48%] border-t border-sky-200/25 z-0"></div>
+
+    <!-- Minimal Top HUD matching image_d4ea5b.jpg (Timer + MENU Top Right) -->
+    <div class="relative z-20 px-4 sm:px-6 pt-3 flex items-start justify-end pointer-events-none">
+      <span id="hud-mode-label" class="hidden">4v4</span>
+      <span id="battle-status-pill" class="hidden">LIVE</span>
+      <div class="flex items-center gap-2.5 pointer-events-auto">
+        <div class="pcrd-timer-pill rounded-full px-3.5 py-1.5 flex items-center gap-2 shadow-lg">
+          <span class="text-amber-300 text-xs">⏳</span>
+          <span id="battle-timer" class="font-mono-num text-xs sm:text-sm font-extrabold text-white">01:30</span>
+        </div>
+        <button id="hud-menu-btn" class="pcrd-menu-btn rounded-xl px-4 py-1.5 font-display text-xs sm:text-sm font-extrabold tracking-wider text-amber-950 shadow-lg hover:brightness-105 active:scale-95 transition">
+          MENU
+        </button>
+      </div>
+    </div>
+
+    <!-- Combatants, FX, Popups & Skill Speech Bubbles -->
+    <div id="arena-stage" class="relative flex-1 w-full overflow-visible z-10">
+      <div id="fx-layer" class="absolute inset-0 pointer-events-none overflow-visible z-[16]"></div>
+      <div id="arena-units-layer" class="absolute inset-0 z-[15]"></div>
+      <div id="popups-layer" class="absolute inset-0 pointer-events-none overflow-visible z-[28]"></div>
+      <div id="speech-bubbles-layer" class="absolute inset-0 pointer-events-none overflow-visible z-[27]"></div>
+    </div>
+
+    <!-- Full-Screen WIN / LOSE Screen Overlay -->
+    <div id="battle-result-overlay" class="hidden fixed inset-0 z-30 flex flex-col justify-between p-5 sm:p-8 select-none bg-gradient-to-b from-slate-950/65 via-slate-950/40 to-slate-950/85 backdrop-blur-[2px]">
+      <div class="flex items-start justify-center pt-2">
+        <div id="result-achievement-pill" class="bg-slate-900/90 border-2 border-amber-300/80 rounded-2xl px-5 py-2 text-center shadow-xl">
+          <div id="result-badge" class="text-[10px] font-extrabold uppercase tracking-widest text-amber-300">BATTLE COMPLETE</div>
+          <div id="result-subtitle" class="text-xs sm:text-sm font-semibold text-slate-100">All opposing targets defeated.</div>
+        </div>
+      </div>
+
+      <div class="my-auto flex flex-col items-center text-center pointer-events-none">
+        <div id="result-title" class="pcrd-result-banner font-display text-6xl sm:text-8xl font-extrabold tracking-wider uppercase">
+          WIN!
+        </div>
+        <div id="result-lineup-strip" class="mt-4 flex flex-wrap items-end justify-center gap-4 sm:gap-8"></div>
+        <div id="result-damage-summary" class="mt-4 w-full max-w-xl bg-slate-950/85 border border-slate-700/80 rounded-2xl p-3 sm:p-4 text-left shadow-2xl pointer-events-auto"></div>
+      </div>
+
+      <div class="flex items-center justify-center sm:justify-end gap-3 pb-1">
+        <button id="overlay-draft-btn" class="px-5 py-2.5 rounded-xl font-bold text-sm bg-slate-900/95 hover:bg-slate-800 text-sky-200 border border-sky-300/40 shadow-lg transition">
+          Draft Squad
+        </button>
+        <button id="overlay-restart-btn" class="pcrd-next-btn px-7 py-2.5 rounded-xl font-extrabold text-sm text-white shadow-xl hover:brightness-105 active:scale-95 transition">
+          Next / Replay
+        </button>
+      </div>
+    </div>
+
+
+    <!-- Bottom PCRD Dock: UB Character Portraits (Center/Left) + AUTO & Fast-Forward (Right) -->
+    <div class="relative z-20 px-3 sm:px-6 pb-3 sm:pb-4 pt-1 flex items-end justify-between gap-2 sm:gap-4 pointer-events-none">
+      <div class="flex-1 flex justify-center sm:justify-start lg:justify-center pointer-events-auto">
+        <div id="ub-deck" class="flex items-end justify-center gap-2 sm:gap-3.5 max-w-full overflow-x-auto px-1 py-1"></div>
+      </div>
+
+      <div class="flex flex-col items-center gap-2 shrink-0 pointer-events-auto">
+        <button id="auto-ub-btn" class="pcrd-circle-btn w-12 h-12 sm:w-14 sm:h-14 rounded-full font-extrabold text-[11px] sm:text-xs tracking-wide flex items-center justify-center shadow-xl transition active:scale-95">
+          AUTO
+        </button>
+        <button id="speed-cycle-btn" title="Cycle battle speed (0.5x / 1x / 2x / 3x)" class="pcrd-circle-btn w-12 h-12 sm:w-14 sm:h-14 rounded-full font-mono-num font-extrabold text-xs sm:text-sm flex items-center justify-center shadow-xl transition active:scale-95">
+          ▶▶
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Impactful Full-Screen Union Burst Cutscene Layer -->
+  <div id="ub-cutin-container" class="hidden fixed inset-0 z-40 pointer-events-none overflow-hidden"></div>
+
+  <!-- Minimal MENU Drawer / Modal (Navigation, Speed, Action Step Jump, Kit & Log) -->
+  <div id="hud-menu-modal" class="hidden fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <h2 class="font-display text-base sm:text-lg font-extrabold text-amber-300">BATTLE MENU</h2>
+          <p class="text-[11px] text-slate-400">Pages, pacing, action step jump, unit kit &amp; battle log</p>
+        </div>
+        <button id="close-hud-menu-btn" class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200">
+          Resume
+        </button>
+      </div>
+
+      <div class="p-4 sm:p-5 overflow-y-auto space-y-4">
+        <!-- Page & Mode Controls -->
+        <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-950/80 border border-slate-800 rounded-2xl p-3">
+          <div class="flex items-center gap-1.5">
+            <button data-page="lobby" class="page-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-slate-200 hover:bg-slate-700">Lobby</button>
+            <button data-page="draft" class="page-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 text-slate-200 hover:bg-slate-700">Drafting</button>
+            <button data-page="battle" class="page-nav-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-400 text-slate-950">Battle</button>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="menu-toggle-mode-btn" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700">
+              Mode: 4v4
+            </button>
+            <button id="reset-battle-btn" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950">
+              Restart
+            </button>
+          </div>
+        </div>
+
+        <!-- Speed & Action Jump Controls -->
+        <div class="flex flex-wrap items-center justify-between gap-2 bg-slate-950/80 border border-slate-800 rounded-2xl p-3">
+          <div class="flex items-center gap-1.5">
+            <button id="pause-toggle-btn" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950">Pause</button>
+            <button data-speed="0.5" class="speed-btn px-2.5 py-1 rounded-lg text-xs font-mono-num font-bold text-slate-300 hover:text-white">0.5x</button>
+            <button data-speed="1" class="speed-btn px-2.5 py-1 rounded-lg text-xs font-mono-num font-bold bg-amber-400 text-slate-950">1x</button>
+            <button data-speed="2" class="speed-btn px-2.5 py-1 rounded-lg text-xs font-mono-num font-bold text-slate-300 hover:text-white">2x</button>
+            <button data-speed="3" class="speed-btn px-2.5 py-1 rounded-lg text-xs font-mono-num font-bold text-slate-300 hover:text-white">3x</button>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button id="prev-action-btn" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-sky-300">◀ Prev Act</button>
+            <button id="next-action-btn" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-amber-300">Next Act ▶</button>
+            <button class="open-codex-trigger px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-purple-300">Roster</button>
+          </div>
+        </div>
+
+        <!-- Selected Unit Inspector -->
+        <div id="unit-inspector" class="bg-slate-950/75 border border-slate-800 rounded-2xl p-3.5"></div>
+
+        <!-- Compact Log -->
+        <div class="bg-slate-950/75 border border-slate-800 rounded-2xl p-3.5">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-extrabold uppercase tracking-wider text-slate-300">Combat Log</span>
+            <button id="clear-log-btn" class="text-[11px] text-slate-400 hover:text-slate-200">Clear</button>
+          </div>
+          <div id="battle-log" class="max-h-36 overflow-y-auto space-y-1 text-[11px] font-mono-num pr-1"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Roster & Kit Codex Modal -->
+  <div id="codex-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <h2 class="font-display text-lg font-bold text-amber-300">Fantasy Crossover Roster — 16 Original Fighters</h2>
+          <p class="text-xs text-slate-400">Union Bursts, auto skills, passives &amp; 3-phase action timings.</p>
+        </div>
+        <button id="close-codex-btn" class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200">
+          Close
+        </button>
+      </div>
+      <div id="codex-content" class="p-5 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-3.5"></div>
+    </div>
+  </div>
+
+  <script src="js/sprites.js"></script>
+  <script src="js/roster.js"></script>
+  <script src="js/roster/bram_ironclad.js"></script>
+  <script src="js/roster/kaelen_ashblade.js"></script>
+  <script src="js/roster/vespera_nightstep.js"></script>
+  <script src="js/roster/sylas_sunweaver.js"></script>
+  <script src="js/roster/mirella_hexthread.js"></script>
+  <script src="js/roster/orin_pyrecaster.js"></script>
+  <script src="js/roster/lyra_windpiercer.js"></script>
+  <script src="js/roster/talia_dewsong.js"></script>
+  <script src="js/roster/garrick_stoneguard.js"></script>
+  <script src="js/roster/seraphina_dawnblade.js"></script>
+  <script src="js/roster/zephyr_shadowstep.js"></script>
+  <script src="js/roster/aurelia_starcaller.js"></script>
+  <script src="js/roster/corvus_voidweaver.js"></script>
+  <script src="js/roster/ignis_emberheart.js"></script>
+  <script src="js/roster/sylvia_frostbow.js"></script>
+  <script src="js/roster/elara_moonbloom.js"></script>
+  <script src="js/roster/training_dummy.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

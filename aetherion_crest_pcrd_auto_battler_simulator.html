@@ -1,0 +1,2962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aetherion Crest — PCRD Auto-Battler Simulator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap');
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: #070b14;
+      color: #f8fafc;
+    }
+
+    .font-display {
+      font-family: 'Cinzel', Georgia, serif;
+    }
+
+    .font-mono-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Arena lane subtle grid & zone dividers */
+    .arena-bg {
+      background:
+        radial-gradient(circle at 25% 35%, rgba(56, 189, 248, 0.11), transparent 45%),
+        radial-gradient(circle at 75% 35%, rgba(244, 63, 94, 0.11), transparent 45%),
+        linear-gradient(180deg, #0d1629 0%, #101d36 55%, #0a101d 100%);
+    }
+
+    .arena-floor {
+      background:
+        repeating-linear-gradient(
+          90deg,
+          rgba(148, 163, 184, 0.08) 0px,
+          rgba(148, 163, 184, 0.08) 1px,
+          transparent 1px,
+          transparent calc(100% / 7)
+        ),
+        linear-gradient(180deg, rgba(30, 41, 59, 0.45) 0%, rgba(15, 23, 42, 0.92) 100%);
+    }
+
+    @keyframes floatUpFade {
+      0% {
+        opacity: 0;
+        transform: translate(-50%, 6px) scale(0.85);
+      }
+      15% {
+        opacity: 1;
+        transform: translate(-50%, 0px) scale(1.06);
+      }
+      80% {
+        opacity: 1;
+      }
+      100% {
+        opacity: 0;
+        transform: translate(-50%, -28px) scale(0.95);
+      }
+    }
+
+    .floating-popup {
+      animation: floatUpFade 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      pointer-events: none;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95);
+      white-space: nowrap;
+    }
+
+    @keyframes windupPose {
+      0% {
+        transform: translateX(0px) rotate(0deg) scale(1);
+      }
+      100% {
+        transform: translateX(var(--windup-x, -6px)) rotate(var(--windup-rot, -8deg)) scale(1.05);
+      }
+    }
+
+    @keyframes strikePose {
+      0% {
+        transform: translateX(var(--windup-x, -6px)) rotate(var(--windup-rot, -8deg)) scale(1.05);
+      }
+      45% {
+        transform: translateX(var(--strike-x, 14px)) rotate(var(--strike-rot, 10deg)) scale(1.12);
+      }
+      100% {
+        transform: translateX(0px) rotate(0deg) scale(1);
+      }
+    }
+
+    @keyframes hitRecoil {
+      0% {
+        transform: translateX(0px) rotate(0deg);
+        filter: brightness(2.2);
+      }
+      45% {
+        transform: translateX(var(--recoil-x, -9px)) rotate(var(--recoil-rot, -7deg));
+        filter: brightness(1.4);
+      }
+      100% {
+        transform: translateX(0px) rotate(0deg);
+        filter: brightness(1);
+      }
+    }
+
+    @keyframes knockbackShift {
+      0% {
+        transform: translateX(0px) rotate(0deg);
+      }
+      40% {
+        transform: translateX(var(--kb-x, -14px)) rotate(var(--kb-rot, -11deg));
+      }
+      100% {
+        transform: translateX(0px) rotate(0deg);
+      }
+    }
+
+    @keyframes idleBob {
+      0%, 100% {
+        transform: translateY(0px);
+      }
+      50% {
+        transform: translateY(-2.5px);
+      }
+    }
+
+    @keyframes auraSpin {
+      0% {
+        transform: translate(-50%, -50%) rotate(0deg);
+      }
+      100% {
+        transform: translate(-50%, -50%) rotate(360deg);
+      }
+    }
+
+    .anim-idle {
+      animation: idleBob 1.7s ease-in-out infinite;
+    }
+
+    .anim-windup {
+      animation: windupPose 0.22s ease-out forwards;
+    }
+
+    .anim-strike {
+      animation: strikePose 0.34s cubic-bezier(0.2, 0.9, 0.3, 1);
+    }
+
+    .anim-hit {
+      animation: hitRecoil 0.28s ease-out;
+    }
+
+    .anim-knockback {
+      animation: knockbackShift 0.35s ease-out;
+    }
+
+    .ub-aura-ring {
+      animation: auraSpin 1.8s linear infinite;
+    }
+
+    @keyframes windupChargePulse {
+      0%, 100% {
+        box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.55), 0 0 16px rgba(56, 189, 248, 0.45);
+      }
+      50% {
+        box-shadow: 0 0 0 5px rgba(56, 189, 248, 0), 0 0 24px rgba(125, 211, 252, 0.8);
+      }
+    }
+
+    .unit-windup-glow {
+      animation: windupChargePulse 0.5s ease-in-out infinite;
+      border-color: #38bdf8 !important;
+    }
+
+    @keyframes bubblePopIn {
+      0% {
+        opacity: 0;
+        transform: translate(-50%, 6px) scale(0.82);
+      }
+      100% {
+        opacity: 1;
+        transform: translate(-50%, 0px) scale(1);
+      }
+    }
+
+    .windup-speech-bubble {
+      animation: bubblePopIn 0.16s cubic-bezier(0.2, 1, 0.3, 1) forwards;
+      pointer-events: none;
+      max-width: 150px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.75));
+    }
+
+    @keyframes cutsceneReveal {
+      0% {
+        opacity: 0;
+        transform: scale(0.94);
+      }
+      15% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      85% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      100% {
+        opacity: 0;
+        transform: scale(1.03);
+      }
+    }
+
+    .ub-cutscene-panel {
+      animation: cutsceneReveal var(--cutscene-dur, 1.15s) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.45);
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-amber-400 selection:text-slate-950">
+  <!-- Top Header & Mode Switcher -->
+  <header class="border-b border-slate-800/90 bg-slate-950/90 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-[1440px] mx-auto px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 via-orange-500 to-rose-600 flex items-center justify-center text-slate-950 font-extrabold shadow-lg shadow-amber-500/20">
+          AC
+        </div>
+        <div>
+          <h1 class="font-display text-base sm:text-lg font-extrabold tracking-wide text-amber-300 leading-tight">
+            AETHERION CREST <span class="text-slate-400 font-sans text-xs font-semibold">PCRD Auto-Battler v1.3</span>
+          </h1>
+          <p class="text-[11px] text-slate-400">
+            4v4 &amp; Dummy Sandbox • 7 Position Zones • 3-Phase Actions (Idle → Windup → Follow-Through) • TP on Combat/Skills
+          </p>
+        </div>
+      </div>
+
+      <!-- Mode Selector -->
+      <div class="flex items-center gap-2 bg-slate-900 p-1 rounded-xl border border-slate-800">
+        <button id="mode-4v4-btn" class="px-3 py-1.5 rounded-lg text-xs font-bold transition bg-amber-400 text-slate-950">
+          4 vs 4 Battle
+        </button>
+        <button id="mode-dummy-btn" class="px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-300 hover:text-white">
+          4 vs Training Dummy
+        </button>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="flex items-center gap-2">
+        <button id="open-codex-btn" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 transition">
+          Roster &amp; Kits (8)
+        </button>
+        <button id="reset-battle-btn" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition shadow">
+          Restart Battle
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 max-w-[1440px] w-full mx-auto p-3 sm:p-4 grid grid-cols-1 xl:grid-cols-12 gap-4">
+    <!-- Left / Center Column: Battlefield & PCRD Controls -->
+    <section class="xl:col-span-8 flex flex-col gap-3">
+      <!-- PCRD Battle Control Bar -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <button id="pause-toggle-btn" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 transition">
+            Pause
+          </button>
+
+          <div class="flex items-center bg-slate-950 rounded-xl p-0.5 border border-slate-800">
+            <button data-speed="1" class="speed-btn px-2.5 py-1 rounded-lg text-xs font-mono-num font-bold bg-amber-400 text-slate-950">1x</button>
+            <button data-speed="2" class="speed-btn px-2.5 py-1 rounded-lg text-xs font-mono-num font-bold text-slate-300 hover:text-white">2x</button>
+            <button data-speed="3" class="speed-btn px-2.5 py-1 rounded-lg text-xs font-mono-num font-bold text-slate-300 hover:text-white">3x</button>
+          </div>
+
+          <button id="auto-ub-btn" class="px-3 py-1.5 rounded-xl text-xs font-bold border transition bg-amber-500/20 text-amber-300 border-amber-400/50">
+            AUTO UB: ON
+          </button>
+        </div>
+
+        <div class="flex items-center gap-4 text-xs">
+          <div class="flex items-center gap-1.5">
+            <span class="text-slate-400">Timer:</span>
+            <span id="battle-timer" class="font-mono-num font-bold text-slate-100">01:30</span>
+          </div>
+          <div id="battle-status-pill" class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+            LIVE COMBAT
+          </div>
+        </div>
+      </div>
+
+      <!-- 7-Zone Arena Stage -->
+      <div class="arena-bg relative rounded-2xl border border-slate-800 overflow-hidden shadow-2xl min-h-[370px] sm:min-h-[410px] flex flex-col justify-between">
+        <!-- 7 Position Zone Headers -->
+        <div class="grid grid-cols-7 border-b border-slate-800/80 bg-slate-950/55 backdrop-blur-xs text-center z-10">
+          <div class="py-1.5 px-1 border-r border-slate-800/60">
+            <div class="text-[10px] font-extrabold uppercase tracking-wider text-sky-300">1. Vanguard</div>
+            <div class="text-[9px] text-slate-400 hidden sm:block">P-Front / E-Rear</div>
+          </div>
+          <div class="py-1.5 px-1 border-r border-slate-800/60">
+            <div class="text-[10px] font-extrabold uppercase tracking-wider text-sky-300/90">2. Frontline</div>
+            <div class="text-[9px] text-slate-400 hidden sm:block">Bruisers</div>
+          </div>
+          <div class="py-1.5 px-1 border-r border-slate-800/60">
+            <div class="text-[10px] font-extrabold uppercase tracking-wider text-cyan-300/90">3. Flank</div>
+            <div class="text-[9px] text-slate-400 hidden sm:block">Skirmishers</div>
+          </div>
+          <div class="py-1.5 px-1 border-r border-slate-800/60">
+            <div class="text-[10px] font-extrabold uppercase tracking-wider text-amber-300">4. Center</div>
+            <div class="text-[9px] text-slate-400 hidden sm:block">Midline</div>
+          </div>
+          <div class="py-1.5 px-1 border-r border-slate-800/60">
+            <div class="text-[10px] font-extrabold uppercase tracking-wider text-purple-300/90">5. Pivot</div>
+            <div class="text-[9px] text-slate-400 hidden sm:block">Control/Supp</div>
+          </div>
+          <div class="py-1.5 px-1 border-r border-slate-800/60">
+            <div class="text-[10px] font-extrabold uppercase tracking-wider text-rose-300/90">6. Backline</div>
+            <div class="text-[9px] text-slate-400 hidden sm:block">Mages/Ranged</div>
+          </div>
+          <div class="py-1.5 px-1">
+            <div class="text-[10px] font-extrabold uppercase tracking-wider text-rose-300">7. Rearguard</div>
+            <div class="text-[9px] text-slate-400 hidden sm:block">P-Rear / E-Front</div>
+          </div>
+        </div>
+
+        <!-- Combatant & FX Canvas Area -->
+        <div id="arena-stage" class="relative flex-1 w-full select-none overflow-hidden">
+          <div class="arena-floor absolute inset-x-0 bottom-0 h-[54%] border-t border-slate-700/50"></div>
+          <div id="fx-layer" class="absolute inset-0 pointer-events-none overflow-hidden z-10"></div>
+          <div id="arena-units-layer" class="absolute inset-0 z-15"></div>
+          <div id="popups-layer" class="absolute inset-0 pointer-events-none overflow-hidden z-20"></div>
+          <div id="speech-bubbles-layer" class="absolute inset-0 pointer-events-none overflow-hidden z-25"></div>
+          <div id="ub-cutin-container" class="absolute inset-0 flex items-center justify-center pointer-events-none z-25 p-3"></div>
+
+          <div id="battle-result-overlay" class="hidden absolute inset-0 bg-slate-950/75 backdrop-blur-sm z-30 flex items-center justify-center p-4">
+            <div class="bg-slate-900 border border-amber-400/50 rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl">
+              <div id="result-badge" class="inline-block px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider mb-2 bg-amber-400/20 text-amber-300">
+                VICTORY
+              </div>
+              <h2 id="result-title" class="font-display text-2xl font-extrabold text-white mb-1">Team Wins!</h2>
+              <p id="result-subtitle" class="text-xs text-slate-300 mb-5">All opposing units defeated.</p>
+              <button id="overlay-restart-btn" class="w-full py-2.5 rounded-xl font-bold text-sm bg-amber-400 hover:bg-amber-300 text-slate-950 transition">
+                Battle Again
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Legend -->
+        <div class="px-3.5 py-2 bg-slate-950/80 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+          <div class="flex flex-wrap items-center gap-3">
+            <span><strong class="text-emerald-400">HP</strong> Green/Rose</span>
+            <span><strong class="text-cyan-300">Shield</strong> Cyan</span>
+            <span><strong class="text-amber-300">TP</strong> 1000 Max (Combat/Skills)</span>
+            <span><strong class="text-sky-300">Phase</strong> Idle → Windup (CC Cancels) → Follow-Through (CC Delays)</span>
+          </div>
+          <span class="text-slate-500">Click a unit or UB card to inspect kit &amp; trigger UB</span>
+        </div>
+      </div>
+
+      <!-- Clickable Union Burst Deck (4 Player Units) -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold uppercase tracking-wider text-amber-300">
+            Union Burst Deck (Click Ready Card or Press 1–4)
+          </span>
+          <span class="text-[11px] text-slate-400">TP charges via dealing/taking damage, KOs &amp; TP skills</span>
+        </div>
+        <div id="ub-deck" class="grid grid-cols-2 sm:grid-cols-4 gap-2.5"></div>
+      </div>
+
+      <!-- Team Builder (4 Units Each Side) -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <div>
+            <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-200">
+              Squad Lineup Builder (4 Slots per Side)
+            </h3>
+            <p class="text-[11px] text-slate-400">
+              Each character has their own 7-zone range &amp; predetermined action loop. Changing lineup resets the match.
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="preset-balanced-btn" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700">
+              Balanced 4v4
+            </button>
+            <button id="preset-rush-btn" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700">
+              Aggro Dive vs Magic
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <div class="text-[11px] font-bold text-sky-300 uppercase tracking-wider mb-1.5">Your Team (4 Units)</div>
+            <div id="player-team-builder" class="grid grid-cols-2 gap-2"></div>
+          </div>
+          <div id="enemy-builder-wrapper">
+            <div class="flex items-center justify-between mb-1.5">
+              <span id="enemy-builder-label" class="text-[11px] font-bold text-rose-300 uppercase tracking-wider">Enemy Team (4 Units)</span>
+              <select id="dummy-count-select" class="hidden bg-slate-950 border border-slate-700 rounded-lg px-2 py-0.5 text-[11px] text-slate-200">
+                <option value="1">1 Dummy</option>
+                <option value="2">2 Dummies</option>
+                <option value="4" selected>4 Dummies</option>
+              </select>
+            </div>
+            <div id="enemy-team-builder" class="grid grid-cols-2 gap-2"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Column: Selected Unit Inspector, Damage/Heal Meter & Battle Log -->
+    <aside class="xl:col-span-4 flex flex-col gap-3">
+      <div id="unit-inspector" class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5"></div>
+
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-200">Combat Telemetry (DMG / Heal / TP)</h3>
+          <span class="text-[10px] text-slate-400">Live Totals</span>
+        </div>
+        <div id="telemetry-bars" class="space-y-2 max-h-[210px] overflow-y-auto pr-1"></div>
+      </div>
+
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 flex-1 flex flex-col min-h-[240px]">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs font-extrabold uppercase tracking-wider text-slate-200">Battle Log</h3>
+          <button id="clear-log-btn" class="text-[11px] text-slate-400 hover:text-slate-200">Clear</button>
+        </div>
+        <div id="battle-log" class="flex-1 max-h-[280px] overflow-y-auto space-y-1 text-[11px] font-mono-num pr-1"></div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Roster & Kit Codex Modal -->
+  <div id="codex-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <h2 class="font-display text-lg font-bold text-amber-300">Fantasy Crossover Roster — 8 Original Fighters</h2>
+          <p class="text-xs text-slate-400">Every unit has 1 Union Burst + (2 Auto Skills &amp; 1 Passive) OR (1 Auto Skill &amp; 2 Passives), plus Idle / Windup / Follow-Through timings.</p>
+        </div>
+        <button id="close-codex-btn" class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200">
+          Close
+        </button>
+      </div>
+      <div id="codex-content" class="p-5 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-3.5"></div>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. POSITION ZONES & PCRD CONSTANTS
+    // =========================================================================
+    const POSITION_ZONES = [
+      { id: 'vanguard', label: 'Vanguard', index: 0, rangeCenter: 95 },
+      { id: 'frontline', label: 'Frontline', index: 1, rangeCenter: 215 },
+      { id: 'flank', label: 'Flank', index: 2, rangeCenter: 340 },
+      { id: 'center', label: 'Center', index: 3, rangeCenter: 465 },
+      { id: 'pivot', label: 'Pivot', index: 4, rangeCenter: 595 },
+      { id: 'backline', label: 'Backline', index: 5, rangeCenter: 725 },
+      { id: 'rearguard', label: 'Rearguard', index: 6, rangeCenter: 865 },
+    ];
+
+    const MAX_TP = 1000;
+    const BATTLE_DURATION_SEC = 90;
+
+    // PCRD-inspired TP gain rates (no passive regen trickle!)
+    const TP_GAIN = {
+      hitDealtBase: 92,
+      damageTakenScale: 0.24,
+      damageTakenCap: 220,
+      killBonus: 250,
+    };
+
+    // Slower, deliberate cadence so 3-phase actions (Idle -> Windup -> Follow-Through) read clearly
+    const PACE_CONFIG = {
+      idleGaugeMultiplier: 0.52,
+      phaseDurationMultiplier: 1.5,
+      minWindupSec: 0.30,
+      minFollowThroughSec: 0.30,
+      windupBaseRate: 0.68,
+      windupMinRate: 0.60,
+    };
+
+    // =========================================================================
+    // 2. CHARACTER SPRITE RENDERER (BESPOKE SVG PER ARCHETYPE)
+    // =========================================================================
+    function renderCharacterSpriteSVG(unit, isVictory = false) {
+      const id = unit.templateId;
+      const flip = unit.side === 'enemy' ? 'transform="scale(-1, 1)" transform-origin="32 32"' : '';
+
+      const palettes = {
+        bram_ironclad: { primary: '#64748b', secondary: '#cbd5e1', accent: '#38bdf8', trim: '#f59e0b' },
+        kaelen_ashblade: { primary: '#991b1b', secondary: '#fca5a5', accent: '#f97316', trim: '#fde047' },
+        vespera_nightstep: { primary: '#312e81', secondary: '#c4b5fd', accent: '#22d3ee', trim: '#e879f9' },
+        sylas_sunweaver: { primary: '#b45309', secondary: '#fef08a', accent: '#fbbf24', trim: '#38bdf8' },
+        mirella_hexthread: { primary: '#581c87', secondary: '#e9d5ff', accent: '#c084fc', trim: '#34d399' },
+        orin_pyrecaster: { primary: '#7c2d12', secondary: '#fed7aa', accent: '#fb923c', trim: '#ef4444' },
+        lyra_windpiercer: { primary: '#065f46', secondary: '#a7f3d0', accent: '#34d399', trim: '#facc15' },
+        talia_dewsong: { primary: '#0f766e', secondary: '#99f6e4', accent: '#2dd4bf', trim: '#fef08a' },
+        training_dummy: { primary: '#78350f', secondary: '#fde68a', accent: '#f59e0b', trim: '#94a3b8' },
+      };
+      const pal = palettes[id] || palettes.bram_ironclad;
+
+      const eyeExpression = isVictory
+        ? `<path d="M27 23 Q29 20 31 23" stroke="#0f172a" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+           <path d="M36 23 Q38 20 40 23" stroke="#0f172a" stroke-width="2.2" fill="none" stroke-linecap="round"/>`
+        : `<circle cx="29" cy="23" r="2.2" fill="#0f172a"/>
+           <circle cx="38" cy="23" r="2.2" fill="#0f172a"/>
+           <circle cx="29.7" cy="22.3" r="0.8" fill="#ffffff"/>
+           <circle cx="38.7" cy="22.3" r="0.8" fill="#ffffff"/>`;
+
+      let weaponOrProp = '';
+      let headgear = '';
+
+      switch (id) {
+        case 'bram_ironclad':
+          headgear = `<path d="M23 18 L33 10 L43 18 Z" fill="${pal.primary}" stroke="${pal.secondary}" stroke-width="1.5"/>
+                      <rect x="25" y="17" width="16" height="4" rx="1" fill="${pal.trim}"/>`;
+          weaponOrProp = `<rect x="44" y="22" width="13" height="22" rx="4" fill="${pal.primary}" stroke="${pal.accent}" stroke-width="2"/>
+                          <circle cx="50.5" cy="33" r="3" fill="${pal.accent}"/>`;
+          break;
+        case 'kaelen_ashblade':
+          headgear = `<path d="M24 18 Q33 11 42 18" fill="${pal.primary}" stroke="${pal.trim}" stroke-width="1.5"/>
+                      <path d="M40 15 L48 11 L43 19 Z" fill="${pal.accent}"/>`;
+          weaponOrProp = `<path d="M45 36 L59 14 L57 25 L48 39 Z" fill="#e2e8f0" stroke="${pal.accent}" stroke-width="1.2"/>
+                          <rect x="43" y="35" width="6" height="2.5" rx="1" transform="rotate(-35 43 35)" fill="${pal.trim}"/>`;
+          break;
+        case 'vespera_nightstep':
+          headgear = `<path d="M23 20 Q33 9 44 19 L41 22 Q33 15 25 22 Z" fill="${pal.primary}" stroke="${pal.accent}" stroke-width="1.4"/>`;
+          weaponOrProp = `<polygon points="46,34 60,27 50,38" fill="${pal.accent}"/>
+                          <polygon points="18,35 7,29 15,39" fill="${pal.trim}"/>`;
+          break;
+        case 'sylas_sunweaver':
+          headgear = `<circle cx="33" cy="14" r="4" fill="${pal.accent}" opacity="0.85"/>
+                      <path d="M24 18 L33 13 L42 18" fill="none" stroke="${pal.trim}" stroke-width="2"/>`;
+          weaponOrProp = `<line x1="48" y1="12" x2="48" y2="50" stroke="${pal.trim}" stroke-width="2.6" stroke-linecap="round"/>
+                          <polygon points="48,8 53,15 48,21 43,15" fill="${pal.accent}"/>`;
+          break;
+        case 'mirella_hexthread':
+          headgear = `<path d="M20 18 L33 8 L46 18 Z" fill="${pal.primary}" stroke="${pal.accent}" stroke-width="1.5"/>
+                      <ellipse cx="33" cy="18" rx="15" ry="3.5" fill="${pal.trim}"/>`;
+          weaponOrProp = `<line x1="49" y1="16" x2="49" y2="50" stroke="#c4b5fd" stroke-width="2.4"/>
+                          <circle cx="49" cy="14" r="5" fill="${pal.accent}"/>
+                          <circle cx="49" cy="14" r="2.2" fill="#ffffff"/>`;
+          break;
+        case 'orin_pyrecaster':
+          headgear = `<path d="M22 18 L33 6 L44 18 Z" fill="${pal.primary}" stroke="${pal.trim}" stroke-width="1.5"/>
+                      <ellipse cx="33" cy="18" rx="14" ry="3" fill="${pal.accent}"/>`;
+          weaponOrProp = `<circle cx="51" cy="24" r="6.5" fill="${pal.accent}" opacity="0.9"/>
+                          <circle cx="51" cy="24" r="3.2" fill="#fef08a"/>`;
+          break;
+        case 'lyra_windpiercer':
+          headgear = `<path d="M24 18 Q33 11 42 18" fill="${pal.primary}" stroke="${pal.secondary}" stroke-width="1.5"/>
+                      <path d="M25 16 L17 11 L23 19 Z" fill="${pal.accent}"/>`;
+          weaponOrProp = `<path d="M45 15 Q57 29 45 45" fill="none" stroke="${pal.trim}" stroke-width="2.5" stroke-linecap="round"/>
+                          <line x1="45" y1="15" x2="45" y2="45" stroke="#e2e8f0" stroke-width="1.1" stroke-dasharray="2 2"/>
+                          <line x1="42" y1="30" x2="59" y2="30" stroke="${pal.accent}" stroke-width="2"/>`;
+          break;
+        case 'talia_dewsong':
+          headgear = `<path d="M23 19 Q33 10 43 19" fill="${pal.secondary}" stroke="${pal.accent}" stroke-width="1.5"/>
+                      <circle cx="33" cy="14" r="2.5" fill="${pal.trim}"/>`;
+          weaponOrProp = `<path d="M49 16 C55 16 55 26 49 26 C43 26 43 16 49 16 Z" fill="${pal.accent}" opacity="0.85"/>
+                          <line x1="49" y1="26" x2="49" y2="50" stroke="${pal.secondary}" stroke-width="2.4"/>`;
+          break;
+        case 'training_dummy':
+        default:
+          headgear = `<rect x="26" y="13" width="14" height="7" rx="3" fill="${pal.trim}"/>`;
+          weaponOrProp = `<line x1="20" y1="33" x2="46" y2="33" stroke="${pal.primary}" stroke-width="5" stroke-linecap="round"/>`;
+          break;
+      }
+
+      return `
+        <svg viewBox="0 0 66 64" class="w-12 h-12 sm:w-14 sm:h-14 overflow-visible drop-shadow">
+          <g ${flip}>
+            <ellipse cx="33" cy="57" rx="14" ry="4" fill="rgba(2, 6, 23, 0.55)"/>
+            <rect x="26" y="42" width="5" height="12" rx="2.5" fill="${pal.primary}" stroke="#0f172a" stroke-width="1.2"/>
+            <rect x="35" y="42" width="5" height="12" rx="2.5" fill="${pal.primary}" stroke="#0f172a" stroke-width="1.2"/>
+            <rect x="23" y="27" width="20" height="17" rx="6" fill="${pal.primary}" stroke="${pal.secondary}" stroke-width="1.4"/>
+            <path d="M27 27 L33 36 L39 27" fill="none" stroke="${pal.trim}" stroke-width="2"/>
+            <circle cx="33" cy="23" r="9.5" fill="${pal.secondary}" stroke="#0f172a" stroke-width="1.4"/>
+            ${eyeExpression}
+            ${headgear}
+            ${weaponOrProp}
+          </g>
+        </svg>
+      `;
+    }
+
+    // =========================================================================
+    // 3. 8 ORIGINAL FANTASY CHARACTERS + TRAINING DUMMY TEMPLATE
+    // =========================================================================
+    const CHARACTER_TEMPLATES = [
+      {
+        id: 'bram_ironclad',
+        name: 'Bram Ironclad',
+        title: 'Bastion Knight',
+        positionZone: 'vanguard',
+        damageType: 'physical',
+        kitFormat: '1 UB • 2 Auto Skills • 1 Passive',
+        stats: { maxHp: 3400, patk: 210, matk: 90, pdef: 240, mdef: 135, actionSpeed: 0.92, critRate: 0.10, critMult: 1.5, tpGainRate: 1.15 },
+        openingLoop: ['skill1', 'auto'],
+        mainLoop: ['auto', 'skill2', 'auto', 'skill1'],
+        ub: {
+          name: 'Aegis Cataclysm',
+          callout: 'Bastion, crush them!',
+          cutsceneKind: 'aoe_offense',
+          windupSec: 0.52,
+          followThroughSec: 0.56,
+          desc: 'Slams ground for heavy Physical damage to nearest foes, grants self Barrier (28% Max HP), and Taunts enemies for 4.5s.',
+          action: 'ub_aegis_cataclysm',
+        },
+        autoSkills: {
+          auto: {
+            name: 'Iron Cleave',
+            callout: 'Cleave!',
+            windupSec: 0.28,
+            followThroughSec: 0.26,
+            desc: 'Physical strike on nearest enemy (~92 base TP on hit).',
+            action: 'phys_nearest',
+            mult: 1.0,
+            baseHitTp: 92,
+          },
+          skill1: {
+            name: 'Bulwark Oath',
+            callout: 'Hold the line!',
+            windupSec: 0.36,
+            followThroughSec: 0.34,
+            desc: 'Raises own Physical DEF (+35% for 6s) and grants a shield (+110 TP boost).',
+            action: 'buff_self_def_shield',
+            defPct: 0.35,
+            shieldMult: 1.3,
+            tpBoost: 110,
+          },
+          skill2: {
+            name: 'Shattering Ram',
+            callout: 'Shatter their guard!',
+            windupSec: 0.44,
+            followThroughSec: 0.54,
+            desc: 'Heavy physical blow on nearest enemy dealing 145% ATK, reducing DEF by 20% for 5s, and knocking back slightly (~115 base TP).',
+            action: 'phys_def_shred',
+            mult: 1.45,
+            shredPct: 0.20,
+            knockbackPx: 18,
+            baseHitTp: 115,
+          },
+        },
+        passives: [
+          { name: 'Bastion Stance', type: 'battle_start', desc: 'Starts battle with +25% Physical DEF and 140 starting TP.' },
+        ],
+      },
+      {
+        id: 'kaelen_ashblade',
+        name: 'Kaelen Ashblade',
+        title: 'Dusk Duelist',
+        positionZone: 'frontline',
+        damageType: 'physical',
+        kitFormat: '1 UB • 1 Auto Skill • 2 Passives',
+        stats: { maxHp: 2550, patk: 315, matk: 90, pdef: 150, mdef: 120, actionSpeed: 1.06, critRate: 0.22, critMult: 1.65, tpGainRate: 1.05 },
+        openingLoop: ['auto', 'skill1'],
+        mainLoop: ['auto', 'auto', 'skill1'],
+        ub: {
+          name: 'Crimson Eclipse',
+          callout: 'Dusk consumes all!',
+          cutsceneKind: 'single_strike',
+          windupSec: 0.46,
+          followThroughSec: 0.52,
+          desc: 'Unleashes 2 rapid dusk slashes (270% total Physical ATK) on nearest enemy, heals 45% of damage dealt, and boosts ATK.',
+          action: 'ub_crimson_eclipse',
+        },
+        autoSkills: {
+          auto: {
+            name: 'Ash Edge',
+            callout: 'Slice!',
+            windupSec: 0.24,
+            followThroughSec: 0.22,
+            desc: 'Swift physical slash on nearest enemy (~92 base TP on hit).',
+            action: 'phys_nearest',
+            mult: 1.05,
+            baseHitTp: 92,
+          },
+          skill1: {
+            name: 'Sanguine Rend',
+            callout: 'Feed the blade!',
+            windupSec: 0.38,
+            followThroughSec: 0.46,
+            desc: 'Deals 155% Physical ATK to nearest enemy (~120 base TP) and heals self for 35% of damage dealt.',
+            action: 'phys_lifesteal',
+            mult: 1.55,
+            leechPct: 0.35,
+            baseHitTp: 120,
+          },
+        },
+        passives: [
+          { name: 'Dusk Momentum', type: 'battle_start', desc: 'Grants +18% Physical ATK and +12% Crit Rate from the start of combat.' },
+          { name: 'Bloodied Fury', type: 'on_hit_taken', desc: 'Taking heavy damage grants +12% ATK stack (up to 3) and extra TP.' },
+        ],
+      },
+      {
+        id: 'vespera_nightstep',
+        name: 'Vespera Nightstep',
+        title: 'Rift Skirmisher',
+        positionZone: 'flank',
+        damageType: 'physical',
+        kitFormat: '1 UB • 2 Auto Skills • 1 Passive',
+        stats: { maxHp: 2250, patk: 335, matk: 90, pdef: 130, mdef: 125, actionSpeed: 1.16, critRate: 0.26, critMult: 1.70, tpGainRate: 1.08 },
+        openingLoop: ['skill1', 'auto'],
+        mainLoop: ['auto', 'skill2', 'auto', 'skill1'],
+        ub: {
+          name: 'Phantom Severance',
+          callout: 'Nowhere to hide!',
+          cutsceneKind: 'single_strike',
+          windupSec: 0.42,
+          followThroughSec: 0.48,
+          desc: 'Blinks to strike the lowest-HP or mid/back enemy for 290% Physical ATK and shreds DEF by 30% for 6s.',
+          action: 'ub_phantom_severance',
+        },
+        autoSkills: {
+          auto: {
+            name: 'Rift Fang',
+            callout: 'Quick cut!',
+            windupSec: 0.20,
+            followThroughSec: 0.20,
+            desc: 'Fast strike on nearest enemy (~92 base TP on hit).',
+            action: 'phys_nearest',
+            mult: 1.0,
+            baseHitTp: 92,
+          },
+          skill1: {
+            name: 'Exposed Seam',
+            callout: 'Found an opening!',
+            windupSec: 0.34,
+            followThroughSec: 0.36,
+            desc: 'Strikes a mid/back or nearest enemy for 130% Physical ATK (~112 base TP) and reduces DEF by 22% for 5s.',
+            action: 'flank_shred_strike',
+            mult: 1.30,
+            shredPct: 0.22,
+            baseHitTp: 112,
+          },
+          skill2: {
+            name: 'Twin Mirage',
+            callout: 'Sever in two!',
+            windupSec: 0.38,
+            followThroughSec: 0.44,
+            desc: 'Rapid slash on lowest-HP enemy for 170% Physical ATK (~118 base TP on hit).',
+            action: 'phys_lowest_hp',
+            mult: 1.70,
+            baseHitTp: 118,
+          },
+        },
+        passives: [
+          { name: 'Rift Reflexes', type: 'battle_start', desc: '+14% Action Speed and +10% Crit Rate at battle start.' },
+        ],
+      },
+      {
+        id: 'sylas_sunweaver',
+        name: 'Sylas Sunweaver',
+        title: 'Aether Paladin',
+        positionZone: 'center',
+        damageType: 'magical',
+        kitFormat: '1 UB • 1 Auto Skill • 2 Passives',
+        stats: { maxHp: 2800, patk: 110, matk: 285, pdef: 175, mdef: 185, actionSpeed: 1.00, critRate: 0.14, critMult: 1.55, tpGainRate: 1.10 },
+        openingLoop: ['skill1', 'auto'],
+        mainLoop: ['auto', 'skill1', 'auto'],
+        ub: {
+          name: 'Dawnstar Judgment',
+          callout: 'Dawnstar, answer!',
+          cutsceneKind: 'aoe_offense',
+          windupSec: 0.50,
+          followThroughSec: 0.48,
+          desc: 'Calls a pillar of light on nearest & adjacent foes for 250% Magical ATK, then heals all allies and grants a Barrier.',
+          action: 'ub_dawnstar_judgment',
+        },
+        autoSkills: {
+          auto: {
+            name: 'Sunlance Bolt',
+            callout: 'Radiant bolt!',
+            windupSec: 0.26,
+            followThroughSec: 0.24,
+            desc: 'Fires a radiant bolt at nearest enemy for 100% Magical ATK (~92 base TP on hit).',
+            action: 'mag_nearest',
+            mult: 1.0,
+            baseHitTp: 92,
+          },
+          skill1: {
+            name: 'Radiant Ward',
+            callout: 'Aegis of light!',
+            windupSec: 0.36,
+            followThroughSec: 0.36,
+            desc: 'Heals the most wounded ally (135% MATK), grants a shield, and boosts ally TP by +115.',
+            action: 'heal_lowest_shield',
+            healMult: 1.35,
+            shieldMult: 1.15,
+            tpBoost: 115,
+          },
+        },
+        passives: [
+          { name: 'Aether Conduit', type: 'battle_start', desc: 'Starts with +180 TP and +15% Magical ATK.' },
+          { name: 'Solar Blessing', type: 'periodic_aura', desc: 'Every ~6s of combat, pulses +75 TP and minor ward to frontline/lowest ally.' },
+        ],
+      },
+      {
+        id: 'mirella_hexthread',
+        name: 'Mirella Hexthread',
+        title: 'Chrono Weaver',
+        positionZone: 'pivot',
+        damageType: 'magical',
+        kitFormat: '1 UB • 2 Auto Skills • 1 Passive',
+        stats: { maxHp: 2150, patk: 85, matk: 295, pdef: 125, mdef: 175, actionSpeed: 1.08, critRate: 0.15, critMult: 1.5, tpGainRate: 1.12 },
+        openingLoop: ['skill1', 'auto'],
+        mainLoop: ['auto', 'skill2', 'skill1', 'auto'],
+        ub: {
+          name: 'Hourglass Paradox',
+          callout: 'Bend the timeline!',
+          cutsceneKind: 'ally_support',
+          windupSec: 0.48,
+          followThroughSec: 0.45,
+          desc: 'Hastes all allies (+25% Action Speed & +220 TP) while inflicting Slow (-25% Action Speed) & MDEF break on enemies.',
+          action: 'ub_hourglass_paradox',
+        },
+        autoSkills: {
+          auto: {
+            name: 'Astral Thread',
+            callout: 'Thread snap!',
+            windupSec: 0.24,
+            followThroughSec: 0.22,
+            desc: 'Arcane pulse on nearest enemy for 100% Magical ATK (~92 base TP on hit).',
+            action: 'mag_nearest',
+            mult: 1.0,
+            baseHitTp: 92,
+          },
+          skill1: {
+            name: 'Chrono Haste',
+            callout: 'Accelerate flow!',
+            windupSec: 0.34,
+            followThroughSec: 0.32,
+            desc: 'Grants Haste (+22% Action Speed for 5s) and +135 TP boost to highest-DPS ally.',
+            action: 'buff_ally_haste_tp',
+            hastePct: 0.22,
+            tpGrant: 135,
+          },
+          skill2: {
+            name: 'Hex Snare',
+            callout: 'Time slows for you!',
+            windupSec: 0.40,
+            followThroughSec: 0.38,
+            desc: 'Deals 135% Magical ATK to nearest enemy (~112 base TP) and applies Slow (-20% Action Speed for 4.5s).',
+            action: 'mag_slow_enemy',
+            mult: 1.35,
+            slowPct: 0.20,
+            baseHitTp: 112,
+          },
+        },
+        passives: [
+          { name: 'Temporal Resonance', type: 'battle_start', desc: '+12% Action Speed and +120 starting TP.' },
+        ],
+      },
+      {
+        id: 'orin_pyrecaster',
+        name: 'Orin Pyrecaster',
+        title: 'Cinder Archmage',
+        positionZone: 'backline',
+        damageType: 'magical',
+        kitFormat: '1 UB • 2 Auto Skills • 1 Passive',
+        stats: { maxHp: 2050, patk: 80, matk: 365, pdef: 115, mdef: 165, actionSpeed: 0.98, critRate: 0.20, critMult: 1.65, tpGainRate: 1.05 },
+        openingLoop: ['auto', 'skill1'],
+        mainLoop: ['auto', 'skill2', 'auto', 'skill1'],
+        ub: {
+          name: 'Cataclysmic Meteor',
+          callout: 'Burn to ash!',
+          cutsceneKind: 'aoe_offense',
+          windupSec: 0.56,
+          followThroughSec: 0.55,
+          desc: 'Calls a blazing meteor across ALL enemies for 240% Magical ATK, shredding MDEF (-25%) and igniting Burn.',
+          action: 'ub_cataclysmic_meteor',
+        },
+        autoSkills: {
+          auto: {
+            name: 'Ember Spark',
+            callout: 'Spark!',
+            windupSec: 0.26,
+            followThroughSec: 0.24,
+            desc: 'Launches a fire bolt at nearest enemy for 105% Magical ATK (~92 base TP on hit).',
+            action: 'mag_nearest',
+            mult: 1.05,
+            baseHitTp: 92,
+          },
+          skill1: {
+            name: 'Cinder Burst',
+            callout: 'Cinder detonation!',
+            windupSec: 0.44,
+            followThroughSec: 0.46,
+            desc: 'Blasts nearest & adjacent foes for 145% Magical ATK (~114 base TP) and applies Burn damage over time.',
+            action: 'mag_aoe_burn',
+            mult: 1.45,
+            burnMult: 0.45,
+            baseHitTp: 114,
+          },
+          skill2: {
+            name: 'Scorch Lance',
+            callout: 'White-hot lance!',
+            windupSec: 0.46,
+            followThroughSec: 0.48,
+            desc: 'High-heat lance on lowest-HP enemy for 170% Magical ATK (~122 base TP) and -20% MDEF for 5s.',
+            action: 'mag_mdef_shred',
+            mult: 1.70,
+            shredPct: 0.20,
+            baseHitTp: 122,
+          },
+        },
+        passives: [
+          { name: 'Pyromania', type: 'battle_start', desc: '+20% Magical ATK and +15% Crit Damage.' },
+        ],
+      },
+      {
+        id: 'lyra_windpiercer',
+        name: 'Lyra Windpiercer',
+        title: 'Gale Ranger',
+        positionZone: 'rearguard',
+        damageType: 'physical',
+        kitFormat: '1 UB • 1 Auto Skill • 2 Passives',
+        stats: { maxHp: 2150, patk: 345, matk: 85, pdef: 125, mdef: 145, actionSpeed: 1.12, critRate: 0.25, critMult: 1.75, tpGainRate: 1.05 },
+        openingLoop: ['auto', 'skill1'],
+        mainLoop: ['auto', 'auto', 'skill1'],
+        ub: {
+          name: 'Tempest Piercer',
+          callout: 'Gale, pierce them all!',
+          cutsceneKind: 'single_strike',
+          windupSec: 0.46,
+          followThroughSec: 0.45,
+          desc: 'Fires a piercing gale arrow through the target line for 310% Physical ATK with +30% bonus Crit Rate.',
+          action: 'ub_tempest_piercer',
+        },
+        autoSkills: {
+          auto: {
+            name: 'Gale Arrow',
+            callout: 'Loose!',
+            windupSec: 0.22,
+            followThroughSec: 0.22,
+            desc: 'Long-range shot on nearest enemy for 105% Physical ATK (~92 base TP on hit).',
+            action: 'phys_nearest',
+            mult: 1.05,
+            baseHitTp: 92,
+          },
+          skill1: {
+            name: 'Twin Hawk Volley',
+            callout: 'Twin gale shots!',
+            windupSec: 0.36,
+            followThroughSec: 0.38,
+            desc: 'Precision arrow volley on lowest-HP enemy for 165% Physical ATK (~120 base TP on hit).',
+            action: 'phys_lowest_hp',
+            mult: 1.65,
+            baseHitTp: 120,
+          },
+        },
+        passives: [
+          { name: 'Hawkeye Focus', type: 'battle_start', desc: '+15% Physical ATK and +12% Crit Rate.' },
+          { name: 'Tailwind Quiver', type: 'periodic_aura', desc: 'Every ~6.5s, gains +10% Action Speed surge and +70 TP.' },
+        ],
+      },
+      {
+        id: 'talia_dewsong',
+        name: 'Talia Dewsong',
+        title: 'Verdant Cleric',
+        positionZone: 'rearguard',
+        damageType: 'magical',
+        kitFormat: '1 UB • 2 Auto Skills • 1 Passive',
+        stats: { maxHp: 2300, patk: 80, matk: 310, pdef: 130, mdef: 185, actionSpeed: 1.02, critRate: 0.12, critMult: 1.5, tpGainRate: 1.12 },
+        openingLoop: ['skill1', 'auto'],
+        mainLoop: ['auto', 'skill1', 'skill2', 'auto'],
+        ub: {
+          name: 'Sanctuary of Dew',
+          callout: 'Pure dew, heal all!',
+          cutsceneKind: 'ally_support',
+          windupSec: 0.48,
+          followThroughSec: 0.46,
+          desc: 'Restores HP across ALL allies (190% MATK scaling), grants a protective barrier, and removes debuffs.',
+          action: 'ub_sanctuary_dew',
+        },
+        autoSkills: {
+          auto: {
+            name: 'Dewdrop Pulse',
+            callout: 'Ripple!',
+            windupSec: 0.25,
+            followThroughSec: 0.23,
+            desc: 'Fires a pure water orb at nearest enemy for 95% Magical ATK (~92 base TP on hit).',
+            action: 'mag_nearest',
+            mult: 0.95,
+            baseHitTp: 92,
+          },
+          skill1: {
+            name: 'Verdant Mend',
+            callout: 'Mend your wounds!',
+            windupSec: 0.34,
+            followThroughSec: 0.34,
+            desc: 'Heals lowest-HP ally (155% MATK) and boosts their TP by +110.',
+            action: 'heal_lowest_tp',
+            healMult: 1.55,
+            tpGrant: 110,
+          },
+          skill2: {
+            name: 'Mossbark Shield',
+            callout: 'Barkward rise!',
+            windupSec: 0.36,
+            followThroughSec: 0.36,
+            desc: 'Grants a Barrier (140% MATK) and +20% DEF for 5s to most endangered ally (+95 TP boost).',
+            action: 'shield_lowest_hp',
+            shieldMult: 1.40,
+            defPct: 0.20,
+            tpBoost: 95,
+          },
+        },
+        passives: [
+          { name: 'Springtide Grace', type: 'battle_start', desc: '+22% Healing/Shield potency and +150 starting TP.' },
+        ],
+      },
+    ];
+
+    const TRAINING_DUMMY_TEMPLATE = {
+      id: 'training_dummy',
+      name: 'Arcane Training Dummy',
+      title: 'Sandbox Target',
+      positionZone: 'vanguard',
+      damageType: 'magical',
+      kitFormat: '1 UB • 1 Auto Skill • 1 Passive',
+      stats: { maxHp: 18000, patk: 90, matk: 90, pdef: 110, mdef: 110, actionSpeed: 0.75, critRate: 0.05, critMult: 1.5, tpGainRate: 1.0 },
+      openingLoop: ['auto'],
+      mainLoop: ['auto', 'skill1'],
+      ub: {
+        name: 'Core Overload',
+        callout: 'Overload pulse!',
+        cutsceneKind: 'aoe_offense',
+        windupSec: 0.45,
+        followThroughSec: 0.40,
+        desc: 'Emits a mild shockwave to test team sustain.',
+        action: 'dummy_shockwave',
+      },
+      autoSkills: {
+        auto: {
+          name: 'Dummy Pulse',
+          callout: 'Ping!',
+          windupSec: 0.28,
+          followThroughSec: 0.24,
+          desc: 'Light training tap on nearest enemy (~85 base TP on hit).',
+          action: 'mag_nearest',
+          mult: 0.72,
+          baseHitTp: 85,
+        },
+        skill1: {
+          name: 'Capacitor Vent',
+          callout: 'Venting!',
+          windupSec: 0.35,
+          followThroughSec: 0.30,
+          desc: 'Releases stored charge into a short pulse.',
+          action: 'dummy_vent',
+          tpBoost: 90,
+        },
+      },
+      passives: [
+        { name: 'Reinforced Frame', type: 'battle_start', desc: 'High HP pool for testing action loops, CC & Union Bursts.' },
+      ],
+    };
+
+    // =========================================================================
+    // 4. APPLICATION & BATTLE STATE
+    // =========================================================================
+    const state = {
+      mode: '4v4',
+      dummyCount: 4,
+      playerSelection: ['bram_ironclad', 'vespera_nightstep', 'mirella_hexthread', 'talia_dewsong'],
+      enemySelection: ['kaelen_ashblade', 'sylas_sunweaver', 'orin_pyrecaster', 'lyra_windpiercer'],
+      selectedUnitId: null,
+      speed: 1,
+      paused: false,
+      autoUb: true,
+    };
+
+    let battle = {
+      running: false,
+      ended: false,
+      timeRemaining: BATTLE_DURATION_SEC,
+      units: [],
+      popups: [],
+      fxList: [],
+      logs: [],
+      hitstopTimer: 0,
+      cutscene: null,
+    };
+
+    function getTemplateById(id) {
+      if (id === 'training_dummy') return TRAINING_DUMMY_TEMPLATE;
+      return CHARACTER_TEMPLATES.find((c) => c.id === id) || CHARACTER_TEMPLATES[0];
+    }
+
+    function createCombatUnit(templateId, side, slotIndex, customZoneOverride = null) {
+      const tpl = getTemplateById(templateId);
+      const zoneObj = POSITION_ZONES.find((z) => z.id === (customZoneOverride || tpl.positionZone)) || POSITION_ZONES[3];
+
+      const unit = {
+        uid: `${side}_${slotIndex}_${templateId}_${Math.random().toString(36).slice(2, 6)}`,
+        templateId: tpl.id,
+        name: tpl.name,
+        title: tpl.title,
+        side,
+        slotIndex,
+        positionZone: zoneObj.id,
+        zoneIndex: zoneObj.index,
+        alive: true,
+
+        maxHp: tpl.stats.maxHp,
+        hp: tpl.stats.maxHp,
+        shield: 0,
+        patk: tpl.stats.patk,
+        matk: tpl.stats.matk,
+        pdef: tpl.stats.pdef,
+        mdef: tpl.stats.mdef,
+        actionSpeed: tpl.stats.actionSpeed,
+        critRate: tpl.stats.critRate,
+        critMult: tpl.stats.critMult,
+        tpGainRate: tpl.stats.tpGainRate,
+        damageType: tpl.damageType,
+
+        tp: 0,
+        openingLoop: [...tpl.openingLoop],
+        mainLoop: [...tpl.mainLoop],
+        inOpening: tpl.openingLoop.length > 0,
+        loopIndex: 0,
+        actionGauge: 0,
+        atkStacks: 0,
+
+        // 3-Phase PCRD Action State Machine: 'IDLE' | 'WINDUP' | 'FOLLOWTHROUGH'
+        actionPhase: 'IDLE',
+        phaseTimer: 0,
+        phaseDuration: 0,
+        queuedAction: null,
+        speechBubble: null,
+        ccInterruptCount: 0,
+
+        ub: tpl.ub,
+        autoSkills: tpl.autoSkills,
+        passives: tpl.passives,
+        auraTimer: 0,
+
+        buffs: [],
+        debuffs: [],
+
+        visualX: side === 'player' ? 20 : 80,
+        targetVisualX: side === 'player' ? 20 : 80,
+        lungeOffset: 0,
+        knockbackOffset: 0,
+        animState: 'idle',
+        animTimer: 0,
+
+        statsTracked: {
+          damageDealt: 0,
+          healingDone: 0,
+          tpGained: 0,
+        },
+      };
+
+      for (const p of unit.passives) {
+        if (p.type === 'battle_start') {
+          if (unit.templateId === 'bram_ironclad') {
+            unit.buffs.push({ type: 'defUp', val: 0.25, remaining: 999 });
+            gainTp(unit, 140, 'Bastion Stance');
+          } else if (unit.templateId === 'kaelen_ashblade') {
+            unit.buffs.push({ type: 'atkUp', val: 0.18, remaining: 999 });
+            unit.critRate += 0.12;
+          } else if (unit.templateId === 'vespera_nightstep') {
+            unit.buffs.push({ type: 'haste', val: 0.14, remaining: 999 });
+            unit.critRate += 0.10;
+          } else if (unit.templateId === 'sylas_sunweaver') {
+            unit.buffs.push({ type: 'matkUp', val: 0.15, remaining: 999 });
+            gainTp(unit, 180, 'Aether Conduit');
+          } else if (unit.templateId === 'mirella_hexthread') {
+            unit.buffs.push({ type: 'haste', val: 0.12, remaining: 999 });
+            gainTp(unit, 120, 'Temporal Resonance');
+          } else if (unit.templateId === 'orin_pyrecaster') {
+            unit.buffs.push({ type: 'matkUp', val: 0.20, remaining: 999 });
+            unit.critMult += 0.15;
+          } else if (unit.templateId === 'lyra_windpiercer') {
+            unit.buffs.push({ type: 'patkUp', val: 0.15, remaining: 999 });
+            unit.critRate += 0.12;
+          } else if (unit.templateId === 'talia_dewsong') {
+            unit.buffs.push({ type: 'healUp', val: 0.22, remaining: 999 });
+            gainTp(unit, 150, 'Springtide Grace');
+          }
+        }
+      }
+
+      return unit;
+    }
+
+    function initBattle() {
+      const units = [];
+      state.playerSelection.forEach((tplId, idx) => {
+        units.push(createCombatUnit(tplId, 'player', idx));
+      });
+
+      if (state.mode === 'dummy') {
+        const dummyZones = ['vanguard', 'frontline', 'center', 'backline'];
+        for (let i = 0; i < state.dummyCount; i++) {
+          const zOverride = state.dummyCount === 1 ? 'vanguard' : dummyZones[i % dummyZones.length];
+          units.push(createCombatUnit('training_dummy', 'enemy', i, zOverride));
+        }
+      } else {
+        state.enemySelection.forEach((tplId, idx) => {
+          units.push(createCombatUnit(tplId, 'enemy', idx));
+        });
+      }
+
+      battle = {
+        running: true,
+        ended: false,
+        timeRemaining: BATTLE_DURATION_SEC,
+        units,
+        popups: [],
+        fxList: [],
+        logs: [],
+        hitstopTimer: 0,
+        cutscene: null,
+      };
+
+      if (!state.selectedUnitId || !units.some((u) => u.uid === state.selectedUnitId)) {
+        state.selectedUnitId = units[0]?.uid || null;
+      }
+
+      document.getElementById('battle-result-overlay').classList.add('hidden');
+      document.getElementById('ub-cutin-container').innerHTML = '';
+      setBattleStatus('LIVE COMBAT', 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30');
+      addLog('system', `Battle started (${state.mode === '4v4' ? '4 vs 4' : `4 vs ${state.dummyCount} Training Dummy`}).`);
+      updateFrontShiftAndVisualPositions(1);
+      renderAllUI();
+    }
+
+    // =========================================================================
+    // 5. POSITIONING, CROWD CONTROL & EFFECTIVE STATS
+    // =========================================================================
+    function getLivingUnits(side = null) {
+      return battle.units.filter((u) => u.alive && (!side || u.side === side));
+    }
+
+    function getActiveCcLabel(unit) {
+      if (!unit || !unit.alive) return null;
+      if (unit.debuffs.some((d) => d.type === 'stun')) return 'STUN';
+      if (unit.debuffs.some((d) => d.type === 'knockback')) return 'KNOCKBACK';
+      if (unit.debuffs.some((d) => d.type === 'silence')) return 'SILENCE';
+      return null;
+    }
+
+    function isUnitIncapacitated(unit) {
+      return unit.debuffs.some((d) => d.type === 'stun' || d.type === 'knockback');
+    }
+
+    function isUnitSilenced(unit) {
+      return unit.debuffs.some((d) => d.type === 'silence');
+    }
+
+    function interruptActiveWindupIfAny(unit, ccReason) {
+      if (!unit || !unit.alive) return;
+      if (unit.actionPhase === 'WINDUP' && unit.queuedAction) {
+        const cancelledName = unit.queuedAction.label;
+        unit.queuedAction = null;
+        unit.speechBubble = null;
+        unit.actionPhase = 'IDLE';
+        unit.phaseTimer = 0;
+        unit.phaseDuration = 0;
+        unit.actionGauge = 0;
+        unit.ccInterruptCount = (unit.ccInterruptCount || 0) + 1;
+        if (unit.animState === 'windup') {
+          unit.animState = 'idle';
+          unit.animTimer = 0;
+        }
+        spawnPopup(unit, 'INTERRUPTED!', 'text-rose-300 font-extrabold text-xs', -20);
+        addLog('cc', `⚡ ${unit.name}'s ${cancelledName} windup was CANCELLED by ${ccReason}! Returns to IDLE.`);
+      }
+    }
+
+    function getEffectiveStats(unit) {
+      let patkMult = 1;
+      let matkMult = 1;
+      let pdefMult = 1;
+      let mdefMult = 1;
+      let hasteMult = 1;
+      let healMult = 1;
+      let bonusCrit = 0;
+
+      for (const b of unit.buffs) {
+        if (b.type === 'patkUp') patkMult += b.val;
+        if (b.type === 'atkUp') {
+          patkMult += b.val;
+          matkMult += b.val;
+        }
+        if (b.type === 'matkUp') matkMult += b.val;
+        if (b.type === 'defUp') {
+          pdefMult += b.val;
+          mdefMult += b.val;
+        }
+        if (b.type === 'haste') hasteMult += b.val;
+        if (b.type === 'healUp') healMult += b.val;
+        if (b.type === 'critUp') bonusCrit += b.val;
+      }
+
+      for (const d of unit.debuffs) {
+        if (d.type === 'defDown') pdefMult = Math.max(0.25, pdefMult - d.val);
+        if (d.type === 'mdefDown') mdefMult = Math.max(0.25, mdefMult - d.val);
+        if (d.type === 'slow') hasteMult = Math.max(0.35, hasteMult - d.val);
+      }
+
+      return {
+        patk: unit.patk * patkMult,
+        matk: unit.matk * matkMult,
+        pdef: unit.pdef * pdefMult,
+        mdef: unit.mdef * mdefMult,
+        hasteMult,
+        healMult,
+        critRate: Math.min(0.95, unit.critRate + bonusCrit),
+      };
+    }
+
+    function getEngagementPosition(unit) {
+      const allies = getLivingUnits(unit.side);
+      const enemies = getLivingUnits(unit.side === 'player' ? 'enemy' : 'player');
+      if (!enemies.length) return unit.zoneIndex;
+
+      const minEnemyZone = Math.min(...enemies.map((e) => e.zoneIndex));
+      const desiredZone = unit.zoneIndex;
+      const frontmostAlliedZone = Math.min(...allies.map((a) => a.zoneIndex));
+      const stepForward = Math.max(0, frontmostAlliedZone - 1);
+
+      const effectiveZone = Math.min(desiredZone, Math.max(minEnemyZone, desiredZone - stepForward * 0.45));
+      return Math.max(0, Math.min(6, effectiveZone));
+    }
+
+    function updateFrontShiftAndVisualPositions(dt) {
+      for (const u of battle.units) {
+        if (!u.alive) continue;
+        const engZone = getEngagementPosition(u);
+        const normalized = engZone / 6;
+        if (u.side === 'player') {
+          u.targetVisualX = 14 + normalized * 28;
+        } else {
+          u.targetVisualX = 86 - normalized * 28;
+        }
+
+        u.visualX += (u.targetVisualX - u.visualX) * Math.min(1, dt * 6.5);
+        u.lungeOffset *= Math.pow(0.04, dt);
+        u.knockbackOffset *= Math.pow(0.05, dt);
+
+        if (u.speechBubble) {
+          u.speechBubble.ttl -= dt;
+          if (u.speechBubble.ttl <= 0) {
+            u.speechBubble = null;
+          }
+        }
+
+        if (u.animState !== 'idle' && u.animState !== 'victory' && u.actionPhase !== 'WINDUP') {
+          u.animTimer -= dt;
+          if (u.animTimer <= 0) {
+            u.animState = 'idle';
+          }
+        }
+      }
+    }
+
+    function selectTargets(attacker, rule, count = 1) {
+      const enemies = getLivingUnits(attacker.side === 'player' ? 'enemy' : 'player');
+      if (!enemies.length) return [];
+
+      const taunters = enemies.filter((e) => e.buffs.some((b) => b.type === 'taunt'));
+      const byFront = [...enemies].sort((a, b) => a.zoneIndex - b.zoneIndex || a.slotIndex - b.slotIndex);
+
+      if (rule === 'nearest') {
+        if (taunters.length > 0 && count === 1) {
+          return [taunters.sort((a, b) => a.zoneIndex - b.zoneIndex)[0]];
+        }
+        return byFront.slice(0, count);
+      }
+      if (rule === 'lowest_hp') {
+        return [...enemies].sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp).slice(0, count);
+      }
+      if (rule === 'flank_or_back') {
+        const midBack = [...enemies].sort((a, b) => b.zoneIndex - a.zoneIndex);
+        return midBack.slice(0, count);
+      }
+      if (rule === 'all_enemies') {
+        return byFront;
+      }
+      return byFront.slice(0, count);
+    }
+
+    function selectAllies(caster, rule, count = 1) {
+      const allies = getLivingUnits(caster.side);
+      if (!allies.length) return [];
+      if (rule === 'all_allies') return allies;
+      if (rule === 'lowest_hp_pct') {
+        return [...allies].sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp).slice(0, count);
+      }
+      if (rule === 'highest_dps') {
+        return [...allies]
+          .sort((a, b) => Math.max(b.patk, b.matk) - Math.max(a.patk, a.matk))
+          .slice(0, count);
+      }
+      if (rule === 'self') return [caster];
+      return allies.slice(0, count);
+    }
+
+    // =========================================================================
+    // 6. TP ECONOMY, DAMAGE, HEALING, FX & UNION BURST CUTSCENES
+    // =========================================================================
+    function gainTp(unit, rawAmount, reason = '') {
+      if (!unit || !unit.alive || rawAmount <= 0) return 0;
+      const before = unit.tp;
+      const gained = Math.round(rawAmount * unit.tpGainRate);
+      unit.tp = Math.min(MAX_TP, unit.tp + gained);
+      const actual = unit.tp - before;
+      if (actual > 0) {
+        unit.statsTracked.tpGained += actual;
+        if (actual >= 35) {
+          spawnPopup(unit, `+${actual} TP`, 'text-amber-300 font-bold text-[11px]', -24);
+        }
+      }
+      return actual;
+    }
+
+    function spawnPopup(unit, text, className = 'text-white font-bold text-xs', offsetY = 0) {
+      battle.popups.push({
+        id: Math.random().toString(36).slice(2, 8),
+        text,
+        className,
+        xPct: unit.visualX,
+        offsetY: offsetY + (Math.random() * 10 - 5),
+        age: 0,
+        duration: 0.95,
+      });
+    }
+
+    function spawnFx(kind, fromUnit, toUnit = null, color = '#38bdf8') {
+      battle.fxList.push({
+        id: Math.random().toString(36).slice(2, 8),
+        kind,
+        fromX: fromUnit ? fromUnit.visualX : 50,
+        toX: toUnit ? toUnit.visualX : fromUnit ? fromUnit.visualX : 50,
+        color,
+        age: 0,
+        duration: kind === 'beam' || kind === 'aoe' ? 0.42 : 0.32,
+      });
+    }
+
+    function setUnitAnim(unit, stateName, duration = 0.35) {
+      unit.animState = stateName;
+      unit.animTimer = duration;
+    }
+
+    function applyCcDebuff(target, ccType, durationSec, sourceName) {
+      if (!target || !target.alive) return;
+      target.debuffs.push({ type: ccType, val: 1, remaining: durationSec });
+      const labelMap = { stun: 'STUN', knockback: 'KNOCKBACK', silence: 'SILENCE' };
+      const label = labelMap[ccType] || ccType.toUpperCase();
+      spawnPopup(target, `${label}!`, 'text-fuchsia-300 font-extrabold text-xs', -12);
+      interruptActiveWindupIfAny(target, `${sourceName} (${label})`);
+    }
+
+    function showUbCutscene(caster, affectedUnits = []) {
+      const container = document.getElementById('ub-cutin-container');
+      if (!container) return;
+
+      const kind = caster.ub.cutsceneKind || 'single_strike';
+      const isPlayer = caster.side === 'player';
+      const durSec = Math.max(1.05, ((caster.ub.windupSec || 0.5) * PACE_CONFIG.phaseDurationMultiplier) + 0.55);
+
+      const badgeText =
+        kind === 'aoe_offense'
+          ? 'AOE STRIKE TARGETS'
+          : kind === 'ally_support'
+          ? 'ALLY SUPPORT TARGETS'
+          : 'PRIMARY STRIKE TARGET';
+
+      const badgeColor =
+        kind === 'aoe_offense'
+          ? 'bg-rose-500/20 text-rose-200 border-rose-400/50'
+          : kind === 'ally_support'
+          ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/50'
+          : 'bg-amber-500/20 text-amber-200 border-amber-400/50';
+
+      const shownTargets = affectedUnits.length > 0 ? affectedUnits : [caster];
+      const targetChips = shownTargets
+        .slice(0, 4)
+        .map((t) => {
+          const hpPct = Math.max(0, Math.ceil((t.hp / t.maxHp) * 100));
+          return `
+            <div class="flex items-center gap-1.5 bg-slate-950/90 border border-slate-700/90 rounded-xl px-2 py-1">
+              <div class="scale-50 -my-3 -mx-2">${renderCharacterSpriteSVG(t, false)}</div>
+              <div class="text-left leading-tight">
+                <div class="text-[10px] font-bold ${t.side === 'player' ? 'text-sky-200' : 'text-rose-200'}">${t.name.split(' ')[0]}</div>
+                <div class="text-[9px] font-mono-num text-slate-400">${t.positionZone.slice(0, 3).toUpperCase()} • ${hpPct}% HP</div>
+              </div>
+            </div>
+          `;
+        })
+        .join('');
+
+      battle.cutscene = { remaining: durSec };
+      container.innerHTML = `
+        <div class="ub-cutscene-panel max-w-md w-full bg-slate-950/92 border-2 ${isPlayer ? 'border-amber-400/80' : 'border-rose-500/80'} rounded-2xl px-4 py-3 shadow-2xl backdrop-blur-md" style="--cutscene-dur:${durSec.toFixed(2)}s">
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border ${badgeColor}">
+              ★ UNION BURST • ${badgeText}
+            </span>
+            <span class="text-[10px] font-mono-num text-amber-300 font-bold">${caster.positionZone.toUpperCase()}</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="w-14 h-14 rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 border border-amber-300/50 flex items-center justify-center shrink-0">
+              ${renderCharacterSpriteSVG(caster, false)}
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="font-display text-sm sm:text-base font-extrabold text-white truncate">${caster.ub.name}</div>
+              <div class="text-[11px] italic text-amber-200/90 truncate">"${caster.ub.callout || caster.ub.name}"</div>
+              <div class="text-[10px] text-slate-300 line-clamp-2 mt-0.5">${caster.ub.desc}</div>
+            </div>
+          </div>
+          <div class="mt-2.5 pt-2 border-t border-slate-800/90">
+            <div class="text-[9px] uppercase tracking-wider text-slate-400 font-bold mb-1">Cutscene Focus</div>
+            <div class="flex flex-wrap gap-1.5">${targetChips}</div>
+          </div>
+        </div>
+      `;
+
+      setTimeout(() => {
+        if (!battle.cutscene || battle.cutscene.remaining <= 0.05) {
+          if (document.getElementById('ub-cutin-container')) {
+            document.getElementById('ub-cutin-container').innerHTML = '';
+          }
+        }
+      }, Math.round(durSec * 1000) + 60);
+    }
+
+    function dealDamage(attacker, defender, rawMultiplier, damageType, options = {}) {
+      if (!defender || !defender.alive) return 0;
+
+      const atkEff = getEffectiveStats(attacker);
+      const defEff = getEffectiveStats(defender);
+
+      const attackStat = damageType === 'physical' ? atkEff.patk : atkEff.matk;
+      const defenseStat = damageType === 'physical' ? defEff.pdef : defEff.mdef;
+
+      const mitigation = 100 / (100 + Math.max(0, defenseStat));
+      let dmg = attackStat * rawMultiplier * mitigation;
+
+      const critChance = Math.min(0.95, atkEff.critRate + (options.bonusCrit || 0));
+      const isCrit = Math.random() < critChance;
+      if (isCrit) {
+        dmg *= attacker.critMult;
+      }
+
+      dmg = Math.max(12, Math.round(dmg));
+
+      let remainingDmg = dmg;
+      if (defender.shield > 0) {
+        const absorbed = Math.min(defender.shield, remainingDmg);
+        defender.shield -= absorbed;
+        remainingDmg -= absorbed;
+      }
+
+      defender.hp = Math.max(0, defender.hp - remainingDmg);
+      attacker.statsTracked.damageDealt += dmg;
+
+      if (options.knockbackPx) {
+        const dir = attacker.side === 'player' ? 1 : -1;
+        defender.knockbackOffset += dir * options.knockbackPx;
+        setUnitAnim(defender, 'knockback', 0.35);
+        interruptActiveWindupIfAny(defender, `${attacker.name} (Knockback)`);
+      } else {
+        setUnitAnim(defender, 'hit', 0.26);
+      }
+
+      if (options.ccType) {
+        applyCcDebuff(defender, options.ccType, options.ccDuration || 1.2, attacker.name);
+      }
+
+      const popupClass = isCrit
+        ? 'text-amber-300 font-extrabold text-sm'
+        : damageType === 'physical'
+        ? 'text-rose-300 font-bold text-xs'
+        : 'text-sky-300 font-bold text-xs';
+      spawnPopup(defender, isCrit ? `${dmg}! CRIT` : `${dmg}`, popupClass, 0);
+
+      if (options.baseHitTp) {
+        gainTp(attacker, options.baseHitTp, options.label || 'Hit');
+      }
+
+      const takenTp = Math.min(
+        TP_GAIN.damageTakenCap,
+        Math.round(dmg * TP_GAIN.damageTakenScale)
+      );
+      if (takenTp > 0 && defender.hp > 0) {
+        gainTp(defender, takenTp, 'Damage Taken');
+      }
+
+      if (defender.hp <= 0 && defender.alive) {
+        defender.alive = false;
+        defender.actionPhase = 'IDLE';
+        defender.queuedAction = null;
+        defender.speechBubble = null;
+        defender.phaseTimer = 0;
+        defender.actionGauge = 0;
+        spawnPopup(defender, 'KO!', 'text-red-500 font-extrabold text-sm', -18);
+        addLog('ko', `💀 ${defender.name} (${defender.side.toUpperCase()}) was defeated!`);
+        gainTp(attacker, TP_GAIN.killBonus, 'KO Bonus');
+      }
+
+      return dmg;
+    }
+
+    function healUnit(healer, target, rawHealAmount, label = 'Heal') {
+      if (!target || !target.alive) return 0;
+      const eff = getEffectiveStats(healer);
+      const amount = Math.max(15, Math.round(rawHealAmount * eff.healMult));
+      const before = target.hp;
+      target.hp = Math.min(target.maxHp, target.hp + amount);
+      const actualHeal = target.hp - before;
+      healer.statsTracked.healingDone += actualHeal;
+      spawnPopup(target, `+${actualHeal} HP`, 'text-emerald-300 font-bold text-xs', -8);
+      if (label) {
+        addLog('heal', `💚 ${healer.name} healed ${target.name} for ${actualHeal} HP (${label}).`);
+      }
+      return actualHeal;
+    }
+
+    function grantShield(caster, target, amount) {
+      if (!target || !target.alive) return;
+      const eff = getEffectiveStats(caster);
+      const finalShield = Math.max(20, Math.round(amount * eff.healMult));
+      target.shield += finalShield;
+      spawnPopup(target, `+${finalShield} SHD`, 'text-cyan-300 font-bold text-[11px]', -16);
+    }
+
+    function triggerUnionBurst(unit) {
+      if (!battle.running || battle.ended || !unit || !unit.alive) return;
+      if (unit.tp < MAX_TP) return;
+      if (unit.actionPhase === 'WINDUP' && unit.queuedAction?.kind === 'ub') return;
+
+      if (isUnitIncapacitated(unit) || isUnitSilenced(unit)) {
+        spawnPopup(unit, isUnitSilenced(unit) ? 'SILENCED!' : 'CC LOCKED!', 'text-rose-300 font-bold text-xs');
+        return;
+      }
+
+      // Consume TP and enter WINDUP phase for Union Burst
+      unit.tp = 0;
+      const ubWindup = Math.max(PACE_CONFIG.minWindupSec, (unit.ub.windupSec ?? 0.48) * PACE_CONFIG.phaseDurationMultiplier);
+      const ubFollow = Math.max(PACE_CONFIG.minFollowThroughSec, (unit.ub.followThroughSec ?? 0.48) * PACE_CONFIG.phaseDurationMultiplier);
+
+      const previewTargets =
+        unit.ub.cutsceneKind === 'ally_support'
+          ? selectAllies(unit, 'all_allies')
+          : unit.ub.cutsceneKind === 'aoe_offense'
+          ? selectTargets(unit, 'all_enemies')
+          : selectTargets(unit, 'nearest', 1);
+
+      unit.queuedAction = {
+        kind: 'ub',
+        stepKey: 'ub',
+        skillDef: unit.ub,
+        label: unit.ub.name,
+        callout: unit.ub.callout || `${unit.ub.name}!`,
+        windupSec: ubWindup,
+        followThroughSec: ubFollow,
+      };
+      unit.actionPhase = 'WINDUP';
+      unit.phaseTimer = 0;
+      unit.phaseDuration = ubWindup;
+      unit.speechBubble = {
+        text: unit.ub.callout || `★ ${unit.ub.name}!`,
+        isUb: true,
+        ttl: ubWindup + 0.25,
+      };
+      setUnitAnim(unit, 'windup', ubWindup);
+
+      battle.hitstopTimer = 0.08;
+      showUbCutscene(unit, previewTargets);
+      addLog('ub', `★ ${unit.name} winds up Union Burst: ${unit.ub.name} (${ubWindup.toFixed(2)}s windup)!`);
+      renderAllUI();
+    }
+
+    function stepPredeterminedLoop(unit) {
+      if (!unit.alive || !battle.running) return;
+
+      let stepKey = null;
+      if (unit.inOpening) {
+        stepKey = unit.openingLoop[unit.loopIndex];
+        unit.loopIndex++;
+        if (unit.loopIndex >= unit.openingLoop.length) {
+          unit.inOpening = false;
+          unit.loopIndex = 0;
+        }
+      } else {
+        stepKey = unit.mainLoop[unit.loopIndex];
+        unit.loopIndex = (unit.loopIndex + 1) % unit.mainLoop.length;
+      }
+
+      let resolvedKey = stepKey;
+      if (stepKey !== 'auto' && isUnitSilenced(unit)) {
+        spawnPopup(unit, 'SILENCED', 'text-fuchsia-300 font-bold text-[11px]', -16);
+        addLog('cc', `${unit.name} is Silenced and cannot cast ${stepKey.toUpperCase()} — falling back to Auto.`);
+        resolvedKey = 'auto';
+      }
+
+      const skillDef = unit.autoSkills[resolvedKey] || unit.autoSkills.auto;
+      const baseWindup = skillDef.windupSec ?? (resolvedKey === 'auto' ? 0.24 : 0.38);
+      const baseFollow = skillDef.followThroughSec ?? (resolvedKey === 'auto' ? 0.24 : 0.42);
+      const windupSec = Math.max(PACE_CONFIG.minWindupSec, baseWindup * PACE_CONFIG.phaseDurationMultiplier);
+      const followThroughSec = Math.max(PACE_CONFIG.minFollowThroughSec, baseFollow * PACE_CONFIG.phaseDurationMultiplier);
+
+      unit.queuedAction = {
+        kind: 'skill',
+        stepKey: resolvedKey,
+        skillDef,
+        label: skillDef.name,
+        callout: skillDef.callout || skillDef.name,
+        windupSec,
+        followThroughSec,
+      };
+      unit.actionPhase = 'WINDUP';
+      unit.phaseTimer = 0;
+      unit.phaseDuration = windupSec;
+      unit.speechBubble = {
+        text: skillDef.callout || skillDef.name,
+        isUb: false,
+        ttl: windupSec + 0.18,
+      };
+      setUnitAnim(unit, 'windup', windupSec);
+    }
+
+    function executeActionCode(unit, actionCode, skillLabel, isUb) {
+      const dir = unit.side === 'player' ? 1 : -1;
+      unit.lungeOffset = dir * (isUb ? 26 : 16);
+      setUnitAnim(unit, 'strike', isUb ? 0.45 : 0.32);
+
+      const sk = isUb ? unit.ub : unit.autoSkills[
+        Object.keys(unit.autoSkills).find((k) => unit.autoSkills[k].action === actionCode) || 'auto'
+      ];
+
+      switch (actionCode) {
+        case 'phys_nearest': {
+          const [t] = selectTargets(unit, 'nearest', 1);
+          if (t) {
+            spawnFx('slash', unit, t, '#fca5a5');
+            const d = dealDamage(unit, t, sk.mult || 1.0, 'physical', {
+              baseHitTp: sk.baseHitTp || 92,
+              label: skillLabel,
+            });
+            addLog('action', `${unit.name} used ${skillLabel} on ${t.name} for ${d} DMG.`);
+          }
+          break;
+        }
+        case 'phys_lowest_hp': {
+          const [t] = selectTargets(unit, 'lowest_hp', 1);
+          if (t) {
+            spawnFx('slash', unit, t, '#fb923c');
+            const d = dealDamage(unit, t, sk.mult || 1.6, 'physical', {
+              baseHitTp: sk.baseHitTp || 118,
+              label: skillLabel,
+            });
+            addLog('skill', `${unit.name} cast ${skillLabel} on ${t.name} for ${d} DMG.`);
+          }
+          break;
+        }
+        case 'phys_def_shred': {
+          const [t] = selectTargets(unit, 'nearest', 1);
+          if (t) {
+            spawnFx('slash', unit, t, '#f59e0b');
+            const d = dealDamage(unit, t, sk.mult || 1.4, 'physical', {
+              knockbackPx: sk.knockbackPx || 18,
+              baseHitTp: sk.baseHitTp || 115,
+              label: skillLabel,
+            });
+            if (t.alive) {
+              t.debuffs.push({ type: 'defDown', val: sk.shredPct || 0.2, remaining: 5 });
+            }
+            addLog('skill', `${unit.name} used ${skillLabel} on ${t.name} (${d} DMG, DEF shred).`);
+          }
+          break;
+        }
+        case 'phys_lifesteal': {
+          const [t] = selectTargets(unit, 'nearest', 1);
+          if (t) {
+            spawnFx('slash', unit, t, '#f87171');
+            const d = dealDamage(unit, t, sk.mult || 1.5, 'physical', {
+              baseHitTp: sk.baseHitTp || 120,
+              label: skillLabel,
+            });
+            const leech = Math.round(d * (sk.leechPct || 0.35));
+            if (leech > 0) healUnit(unit, unit, leech, skillLabel);
+            addLog('skill', `${unit.name} drained ${d} DMG with ${skillLabel} (stole ${leech} HP).`);
+          }
+          break;
+        }
+        case 'flank_shred_strike': {
+          const [t] = selectTargets(unit, 'flank_or_back', 1);
+          if (t) {
+            spawnFx('slash', unit, t, '#22d3ee');
+            const d = dealDamage(unit, t, sk.mult || 1.3, 'physical', {
+              baseHitTp: sk.baseHitTp || 112,
+              label: skillLabel,
+            });
+            if (t.alive) {
+              t.debuffs.push({ type: 'defDown', val: sk.shredPct || 0.22, remaining: 5 });
+            }
+            addLog('skill', `${unit.name} flanked ${t.name} with ${skillLabel} (${d} DMG, -DEF).`);
+          }
+          break;
+        }
+        case 'buff_self_def_shield': {
+          spawnFx('aoe', unit, unit, '#38bdf8');
+          unit.buffs.push({ type: 'defUp', val: sk.defPct || 0.35, remaining: 6 });
+          grantShield(unit, unit, unit.matk * (sk.shieldMult || 1.3) + 180);
+          gainTp(unit, sk.tpBoost || 110, skillLabel);
+          addLog('skill', `${unit.name} activated ${skillLabel} (+DEF, Shield & TP).`);
+          break;
+        }
+        case 'mag_nearest': {
+          const [t] = selectTargets(unit, 'nearest', 1);
+          if (t) {
+            spawnFx('orb', unit, t, '#38bdf8');
+            const d = dealDamage(unit, t, sk.mult || 1.0, 'magical', {
+              baseHitTp: sk.baseHitTp || 92,
+              label: skillLabel,
+            });
+            addLog('action', `${unit.name} cast ${skillLabel} on ${t.name} for ${d} MATK DMG.`);
+          }
+          break;
+        }
+        case 'heal_lowest_shield': {
+          const [ally] = selectAllies(unit, 'lowest_hp_pct', 1);
+          if (ally) {
+            spawnFx('orb', unit, ally, '#34d399');
+            healUnit(unit, ally, unit.matk * (sk.healMult || 1.35), skillLabel);
+            grantShield(unit, ally, unit.matk * (sk.shieldMult || 1.15));
+            gainTp(ally, sk.tpBoost || 115, skillLabel);
+          }
+          break;
+        }
+        case 'buff_ally_haste_tp': {
+          const [ally] = selectAllies(unit, 'highest_dps', 1);
+          if (ally) {
+            spawnFx('orb', unit, ally, '#c084fc');
+            ally.buffs.push({ type: 'haste', val: sk.hastePct || 0.22, remaining: 5 });
+            gainTp(ally, sk.tpGrant || 135, skillLabel);
+            spawnPopup(ally, 'HASTE!', 'text-purple-300 font-bold text-xs', -8);
+            addLog('skill', `${unit.name} cast ${skillLabel} on ${ally.name} (+Haste & +TP).`);
+          }
+          break;
+        }
+        case 'mag_slow_enemy': {
+          const [t] = selectTargets(unit, 'nearest', 1);
+          if (t) {
+            spawnFx('orb', unit, t, '#a855f7');
+            const d = dealDamage(unit, t, sk.mult || 1.35, 'magical', {
+              baseHitTp: sk.baseHitTp || 112,
+              label: skillLabel,
+            });
+            if (t.alive) {
+              t.debuffs.push({ type: 'slow', val: sk.slowPct || 0.20, remaining: 4.5 });
+            }
+            addLog('skill', `${unit.name} cast ${skillLabel} on ${t.name} (${d} DMG, Slowed).`);
+          }
+          break;
+        }
+        case 'mag_aoe_burn': {
+          const targets = selectTargets(unit, 'nearest', 2);
+          targets.forEach((t) => {
+            spawnFx('orb', unit, t, '#fb923c');
+            const d = dealDamage(unit, t, sk.mult || 1.45, 'magical', {
+              baseHitTp: sk.baseHitTp || 114,
+              label: skillLabel,
+            });
+            if (t.alive) {
+              t.debuffs.push({
+                type: 'burn',
+                val: Math.max(25, Math.round(unit.matk * (sk.burnMult || 0.45))),
+                remaining: 4.0,
+                tickTimer: 1.0,
+              });
+            }
+            addLog('skill', `${unit.name} hit ${t.name} with ${skillLabel} for ${d} DMG + Burn.`);
+          });
+          break;
+        }
+        case 'mag_mdef_shred': {
+          const [t] = selectTargets(unit, 'lowest_hp', 1);
+          if (t) {
+            spawnFx('beam', unit, t, '#f97316');
+            const d = dealDamage(unit, t, sk.mult || 1.70, 'magical', {
+              baseHitTp: sk.baseHitTp || 122,
+              label: skillLabel,
+            });
+            if (t.alive) {
+              t.debuffs.push({ type: 'mdefDown', val: sk.shredPct || 0.20, remaining: 5 });
+            }
+            addLog('skill', `${unit.name} pierced ${t.name} with ${skillLabel} (${d} DMG, -MDEF).`);
+          }
+          break;
+        }
+        case 'heal_lowest_tp': {
+          const [ally] = selectAllies(unit, 'lowest_hp_pct', 1);
+          if (ally) {
+            spawnFx('orb', unit, ally, '#2dd4bf');
+            healUnit(unit, ally, unit.matk * (sk.healMult || 1.55), skillLabel);
+            gainTp(ally, sk.tpGrant || 110, skillLabel);
+          }
+          break;
+        }
+        case 'shield_lowest_hp': {
+          const [ally] = selectAllies(unit, 'lowest_hp_pct', 1);
+          if (ally) {
+            spawnFx('orb', unit, ally, '#38bdf8');
+            grantShield(unit, ally, unit.matk * (sk.shieldMult || 1.40));
+            ally.buffs.push({ type: 'defUp', val: sk.defPct || 0.20, remaining: 5 });
+            gainTp(ally, sk.tpBoost || 95, skillLabel);
+            addLog('skill', `${unit.name} protected ${ally.name} with ${skillLabel} (+Shield & +DEF).`);
+          }
+          break;
+        }
+        case 'dummy_vent': {
+          spawnFx('aoe', unit, unit, '#94a3b8');
+          gainTp(unit, sk.tpBoost || 90, skillLabel);
+          addLog('action', `${unit.name} vented charge (${skillLabel}).`);
+          break;
+        }
+        case 'ub_aegis_cataclysm': {
+          const targets = selectTargets(unit, 'nearest', 3);
+          spawnFx('aoe', unit, targets[0] || unit, '#f59e0b');
+          targets.forEach((t, idx) => {
+            dealDamage(unit, t, 2.25, 'physical', {
+              knockbackPx: idx === 0 ? 22 : 10,
+              ccType: idx === 0 ? 'stun' : null,
+              ccDuration: 1.1,
+            });
+          });
+          grantShield(unit, unit, unit.maxHp * 0.28);
+          unit.buffs.push({ type: 'taunt', val: 1, remaining: 4.5 });
+          addLog('ub', `★ ${unit.name} unleashed ${skillLabel} (AOE DMG, Stun, Barrier & Taunt)!`);
+          break;
+        }
+        case 'ub_crimson_eclipse': {
+          const [t] = selectTargets(unit, 'nearest', 1);
+          if (t) {
+            spawnFx('slash', unit, t, '#ef4444');
+            const d1 = dealDamage(unit, t, 1.35, 'physical', { bonusCrit: 0.20 });
+            const d2 = t.alive ? dealDamage(unit, t, 1.35, 'physical', { bonusCrit: 0.20 }) : 0;
+            const total = d1 + d2;
+            healUnit(unit, unit, total * 0.45, skillLabel);
+            unit.buffs.push({ type: 'atkUp', val: 0.20, remaining: 6 });
+            addLog('ub', `★ ${unit.name} executed ${skillLabel} on ${t.name} for ${total} total DMG!`);
+          }
+          break;
+        }
+        case 'ub_phantom_severance': {
+          const [t] = selectTargets(unit, 'lowest_hp', 1);
+          if (t) {
+            spawnFx('beam', unit, t, '#22d3ee');
+            const d = dealDamage(unit, t, 2.90, 'physical', {
+              bonusCrit: 0.25,
+              ccType: 'silence',
+              ccDuration: 2.0,
+            });
+            if (t.alive) {
+              t.debuffs.push({ type: 'defDown', val: 0.30, remaining: 6 });
+            }
+            addLog('ub', `★ ${unit.name} struck ${t.name} with ${skillLabel} for ${d} DMG (-30% DEF & Silence)!`);
+          }
+          break;
+        }
+        case 'ub_dawnstar_judgment': {
+          const targets = selectTargets(unit, 'nearest', 2);
+          targets.forEach((t) => {
+            spawnFx('beam', unit, t, '#fbbf24');
+            dealDamage(unit, t, 2.50, 'magical');
+          });
+          const allies = selectAllies(unit, 'all_allies');
+          allies.forEach((a) => {
+            healUnit(unit, a, unit.matk * 1.25, skillLabel);
+            grantShield(unit, a, unit.matk * 0.9);
+          });
+          addLog('ub', `★ ${unit.name} invoked ${skillLabel} (Light strike + team heal & shield)!`);
+          break;
+        }
+        case 'ub_hourglass_paradox': {
+          const allies = selectAllies(unit, 'all_allies');
+          allies.forEach((a) => {
+            a.buffs.push({ type: 'haste', val: 0.25, remaining: 6 });
+            gainTp(a, 220, skillLabel);
+            spawnFx('orb', unit, a, '#c084fc');
+          });
+          const enemies = selectTargets(unit, 'all_enemies');
+          enemies.forEach((e) => {
+            e.debuffs.push({ type: 'slow', val: 0.25, remaining: 5 });
+            e.debuffs.push({ type: 'mdefDown', val: 0.22, remaining: 5 });
+          });
+          addLog('ub', `★ ${unit.name} warped time with ${skillLabel} (+Haste & +220 TP to allies, Slow/MDEF break to foes)!`);
+          break;
+        }
+        case 'ub_cataclysmic_meteor': {
+          const enemies = selectTargets(unit, 'all_enemies');
+          enemies.forEach((e) => {
+            spawnFx('aoe', unit, e, '#f97316');
+            dealDamage(unit, e, 2.40, 'magical', { bonusCrit: 0.15 });
+            if (e.alive) {
+              e.debuffs.push({ type: 'mdefDown', val: 0.25, remaining: 6 });
+              e.debuffs.push({
+                type: 'burn',
+                val: Math.max(35, Math.round(unit.matk * 0.55)),
+                remaining: 4.5,
+                tickTimer: 1.0,
+              });
+            }
+          });
+          addLog('ub', `★ ${unit.name} dropped ${skillLabel} across ALL enemies!`);
+          break;
+        }
+        case 'ub_tempest_piercer': {
+          const targets = selectTargets(unit, 'nearest', 2);
+          targets.forEach((t) => {
+            spawnFx('beam', unit, t, '#34d399');
+            dealDamage(unit, t, 3.10, 'physical', { bonusCrit: 0.30 });
+          });
+          addLog('ub', `★ ${unit.name} fired ${skillLabel} for massive piercing physical damage!`);
+          break;
+        }
+        case 'ub_sanctuary_dew': {
+          const allies = selectAllies(unit, 'all_allies');
+          allies.forEach((a) => {
+            spawnFx('orb', unit, a, '#2dd4bf');
+            healUnit(unit, a, unit.matk * 1.90, skillLabel);
+            grantShield(unit, a, unit.matk * 1.10);
+            a.debuffs = a.debuffs.filter((d) => !['burn', 'defDown', 'mdefDown', 'slow', 'silence'].includes(d.type));
+          });
+          addLog('ub', `★ ${unit.name} blessed the team with ${skillLabel} (Mass heal, barrier & cleanse)!`);
+          break;
+        }
+        case 'dummy_shockwave': {
+          const enemies = selectTargets(unit, 'all_enemies');
+          enemies.forEach((e) => {
+            spawnFx('aoe', unit, e, '#f59e0b');
+            dealDamage(unit, e, 0.85, 'magical');
+          });
+          addLog('action', `${unit.name} emitted ${skillLabel}.`);
+          break;
+        }
+      }
+    }
+
+    // =========================================================================
+    // 7. SIMULATION TICK LOOP (DELTA TIME & 3-PHASE STATE MACHINE)
+    // =========================================================================
+    function updateBuffsAndDebuffs(unit, dt) {
+      if (!unit.alive) return;
+
+      for (let i = unit.buffs.length - 1; i >= 0; i--) {
+        unit.buffs[i].remaining -= dt;
+        if (unit.buffs[i].remaining <= 0) {
+          unit.buffs.splice(i, 1);
+        }
+      }
+
+      for (let i = unit.debuffs.length - 1; i >= 0; i--) {
+        const d = unit.debuffs[i];
+        if (d.type === 'burn') {
+          d.tickTimer = (d.tickTimer ?? 1.0) - dt;
+          if (d.tickTimer <= 0) {
+            d.tickTimer += 1.0;
+            const burnDmg = Math.max(10, Math.round(d.val));
+            unit.hp = Math.max(0, unit.hp - burnDmg);
+            spawnPopup(unit, `${burnDmg} BURN`, 'text-orange-400 font-bold text-[11px]', 6);
+            if (unit.hp <= 0 && unit.alive) {
+              unit.alive = false;
+              unit.actionPhase = 'IDLE';
+              unit.queuedAction = null;
+              unit.speechBubble = null;
+              spawnPopup(unit, 'KO!', 'text-red-500 font-extrabold text-sm', -18);
+              addLog('ko', `💀 ${unit.name} succumbed to Burn!`);
+            }
+          }
+        }
+        d.remaining -= dt;
+        if (d.remaining <= 0) {
+          unit.debuffs.splice(i, 1);
+        }
+      }
+
+      if (!unit.alive) return;
+
+      for (const p of unit.passives) {
+        if (p.type === 'periodic_aura') {
+          unit.auraTimer += dt;
+          if (unit.auraTimer >= 6.2) {
+            unit.auraTimer -= 6.2;
+            if (unit.templateId === 'sylas_sunweaver') {
+              const frontAlly = [...getLivingUnits(unit.side)].sort((a, b) => a.zoneIndex - b.zoneIndex)[0];
+              if (frontAlly) {
+                gainTp(frontAlly, 75, 'Solar Blessing');
+                grantShield(unit, frontAlly, unit.matk * 0.55);
+              }
+            } else if (unit.templateId === 'lyra_windpiercer') {
+              unit.buffs.push({ type: 'haste', val: 0.12, remaining: 3.5 });
+              gainTp(unit, 70, 'Tailwind Quiver');
+            }
+          }
+        }
+      }
+    }
+
+    function updateBattle(rawDt) {
+      if (!battle.running || battle.ended || state.paused) return;
+
+      if (battle.cutscene && battle.cutscene.remaining > 0) {
+        battle.cutscene.remaining = Math.max(0, battle.cutscene.remaining - rawDt);
+        if (battle.cutscene.remaining === 0) {
+          const el = document.getElementById('ub-cutin-container');
+          if (el) el.innerHTML = '';
+        }
+      }
+
+      if (battle.hitstopTimer > 0) {
+        battle.hitstopTimer -= rawDt;
+        updateFrontShiftAndVisualPositions(rawDt * 0.25);
+        return;
+      }
+
+      const dt = rawDt * state.speed;
+      battle.timeRemaining = Math.max(0, battle.timeRemaining - dt);
+
+      if (state.autoUb) {
+        for (const u of battle.units) {
+          if (u.alive && u.tp >= MAX_TP && u.actionPhase === 'IDLE' && !isUnitIncapacitated(u) && !isUnitSilenced(u)) {
+            triggerUnionBurst(u);
+          }
+        }
+      }
+
+      for (const u of battle.units) {
+        if (!u.alive) continue;
+        updateBuffsAndDebuffs(u, dt);
+        if (!u.alive) continue;
+
+        if (isUnitIncapacitated(u)) {
+          interruptActiveWindupIfAny(u, getActiveCcLabel(u) || 'Crowd Control');
+          if (u.actionPhase === 'FOLLOWTHROUGH') {
+            u.phaseTimer += dt * 0.25;
+          }
+          continue;
+        }
+
+        const eff = getEffectiveStats(u);
+
+        if (u.actionPhase === 'IDLE') {
+          u.actionGauge += u.actionSpeed * eff.hasteMult * dt * 100 * PACE_CONFIG.idleGaugeMultiplier;
+          if (u.actionGauge >= 100) {
+            u.actionGauge = 0;
+            stepPredeterminedLoop(u);
+          }
+        } else if (u.actionPhase === 'WINDUP') {
+          const windupRate = Math.max(
+            PACE_CONFIG.windupMinRate,
+            PACE_CONFIG.windupBaseRate + (eff.hasteMult - 1) * 0.4
+          );
+          u.phaseTimer += dt * windupRate;
+
+          if (u.phaseTimer >= u.phaseDuration && u.queuedAction) {
+            const act = u.queuedAction;
+            u.speechBubble = null;
+            executeActionCode(u, act.skillDef.action, act.label, act.kind === 'ub');
+            if (!battle.running || !u.alive) break;
+
+            u.actionPhase = 'FOLLOWTHROUGH';
+            u.phaseTimer = 0;
+            u.phaseDuration = act.followThroughSec;
+            u.queuedAction = null;
+            checkBattleEnd();
+          }
+        } else if (u.actionPhase === 'FOLLOWTHROUGH') {
+          u.phaseTimer += dt;
+          if (u.phaseTimer >= u.phaseDuration) {
+            u.actionPhase = 'IDLE';
+            u.phaseTimer = 0;
+            u.phaseDuration = 0;
+            u.actionGauge = 0;
+          }
+        }
+      }
+
+      updateFrontShiftAndVisualPositions(dt);
+
+      for (let i = battle.popups.length - 1; i >= 0; i--) {
+        battle.popups[i].age += dt;
+        if (battle.popups[i].age >= battle.popups[i].duration) {
+          battle.popups.splice(i, 1);
+        }
+      }
+
+      for (let i = battle.fxList.length - 1; i >= 0; i--) {
+        battle.fxList[i].age += dt;
+        if (battle.fxList[i].age >= battle.fxList[i].duration) {
+          battle.fxList.splice(i, 1);
+        }
+      }
+
+      checkBattleEnd();
+    }
+
+    function checkBattleEnd() {
+      if (battle.ended) return;
+      const playerAlive = getLivingUnits('player').length;
+      const enemyAlive = getLivingUnits('enemy').length;
+
+      if (enemyAlive === 0) {
+        finishBattle('VICTORY', 'Your Squad Prevails!', 'All opposing targets have been defeated.');
+      } else if (playerAlive === 0) {
+        finishBattle('DEFEAT', 'Squad Fallen', 'Your entire 4-unit lineup was defeated.');
+      } else if (battle.timeRemaining <= 0) {
+        const playerHpPct = sumHpPct('player');
+        const enemyHpPct = sumHpPct('enemy');
+        if (playerHpPct >= enemyHpPct) {
+          finishBattle('TIME VICTORY', 'Decision Victory!', `Time expired with higher remaining HP (${playerHpPct.toFixed(1)}% vs ${enemyHpPct.toFixed(1)}%).`);
+        } else {
+          finishBattle('TIME DEFEAT', 'Time Expired', `Opposing side held higher HP (${enemyHpPct.toFixed(1)}% vs ${playerHpPct.toFixed(1)}%).`);
+        }
+      }
+    }
+
+    function sumHpPct(side) {
+      const sideUnits = battle.units.filter((u) => u.side === side);
+      if (!sideUnits.length) return 0;
+      const totalPct = sideUnits.reduce((acc, u) => acc + Math.max(0, u.hp) / u.maxHp, 0);
+      return (totalPct / sideUnits.length) * 100;
+    }
+
+    function finishBattle(badge, title, subtitle) {
+      battle.ended = true;
+      battle.running = false;
+      setBattleStatus(badge, 'bg-amber-400/20 text-amber-300 border-amber-400/40');
+      addLog('system', `🏁 ${title} — ${subtitle}`);
+      document.getElementById('result-badge').textContent = badge;
+      document.getElementById('result-title').textContent = title;
+      document.getElementById('result-subtitle').textContent = subtitle;
+      document.getElementById('battle-result-overlay').classList.remove('hidden');
+    }
+
+    function setBattleStatus(text, classes) {
+      const pill = document.getElementById('battle-status-pill');
+      pill.textContent = text;
+      pill.className = `px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${classes}`;
+    }
+
+    // =========================================================================
+    // 8. UI RENDERING (ARENA, SPEECH BUBBLES, UB DECK, INSPECTOR, TELEMETRY)
+    // =========================================================================
+    function renderWindupSpeechBubbles() {
+      const layer = document.getElementById('speech-bubbles-layer');
+      if (!layer) return;
+
+      const activeSpeakers = battle.units.filter((u) => u.alive && u.speechBubble);
+      layer.innerHTML = activeSpeakers
+        .map((u) => {
+          const yStagger = (u.slotIndex - 1.5) * 14;
+          const topPct = 54 + yStagger * 0.25;
+          const totalOffsetPx = u.lungeOffset + u.knockbackOffset;
+          const bubbleStyle = u.speechBubble.isUb
+            ? 'bg-amber-400 text-slate-950 border-2 border-yellow-100 font-extrabold'
+            : 'bg-slate-950/95 text-sky-100 border border-sky-400/75 font-semibold';
+
+          return `
+            <div class="windup-speech-bubble absolute ${bubbleStyle} rounded-xl px-2.5 py-1 text-[10px] leading-tight shadow-lg" data-bubble-left="${u.visualX.toFixed(2)}% + ${totalOffsetPx.toFixed(1)}px" data-bubble-top="calc(${topPct}% - 68px)">
+              ${u.speechBubble.text}
+            </div>
+          `;
+        })
+        .join('');
+
+      layer.querySelectorAll('[data-bubble-left]').forEach((el) => {
+        const leftExpr = el.getAttribute('data-bubble-left') || '50% + 0px';
+        el.style.left = `calc(${leftExpr})`;
+        el.style.top = el.getAttribute('data-bubble-top') || '40%';
+      });
+    }
+
+    function addLog(category, message) {
+      const secElapsed = BATTLE_DURATION_SEC - Math.ceil(battle.timeRemaining);
+      const mins = String(Math.floor(secElapsed / 60)).padStart(2, '0');
+      const secs = String(secElapsed % 60).padStart(2, '0');
+      battle.logs.unshift({ category, time: `${mins}:${secs}`, message });
+      if (battle.logs.length > 120) battle.logs.pop();
+      renderBattleLog();
+    }
+
+    function getNextLoopStepLabel(unit) {
+      if (!unit.alive) return 'KO';
+      const ccText = getActiveCcLabel(unit);
+      if (ccText) return `CC: ${ccText}`;
+      if (unit.actionPhase === 'WINDUP' && unit.queuedAction) {
+        return `WINDUP: ${unit.queuedAction.label}`;
+      }
+      if (unit.actionPhase === 'FOLLOWTHROUGH') {
+        return 'FOLLOW-THROUGH';
+      }
+
+      const key = unit.inOpening
+        ? unit.openingLoop[unit.loopIndex]
+        : unit.mainLoop[unit.loopIndex];
+      const prefix = unit.inOpening ? 'IDLE·OP' : 'IDLE·LP';
+      if (key === 'auto') return `${prefix}: Auto`;
+      if (key === 'skill1') return `${prefix}: S1`;
+      if (key === 'skill2') return `${prefix}: S2`;
+      return `${prefix}: ${key}`;
+    }
+
+    function getPhaseProgressPct(unit) {
+      if (!unit.alive) return 0;
+      if (unit.actionPhase === 'IDLE') return Math.max(0, Math.min(100, unit.actionGauge));
+      if (unit.phaseDuration <= 0) return 0;
+      return Math.max(0, Math.min(100, (unit.phaseTimer / unit.phaseDuration) * 100));
+    }
+
+    function renderArena() {
+      const mins = String(Math.floor(battle.timeRemaining / 60)).padStart(2, '0');
+      const secs = String(Math.ceil(battle.timeRemaining % 60) % 60).padStart(2, '0');
+      document.getElementById('battle-timer').textContent = `${mins}:${secs}`;
+
+      const fxLayer = document.getElementById('fx-layer');
+      fxLayer.innerHTML = battle.fxList
+        .map((fx) => {
+          const p = fx.age / fx.duration;
+          const opacity = (1 - p).toFixed(2);
+          if (fx.kind === 'aoe') {
+            const radius = 24 + p * 66;
+            return `<div class="absolute rounded-full border-2 pointer-events-none" data-fx-left="${fx.toX.toFixed(2)}%" data-fx-size="${radius.toFixed(1)}px" data-fx-opacity="${opacity}" data-fx-color="${fx.color}"></div>`;
+          }
+          const curX = fx.fromX + (fx.toX - fx.fromX) * Math.min(1, p * 1.35);
+          return `<div class="absolute w-4 h-4 rounded-full pointer-events-none" data-fx-left="${curX.toFixed(2)}%" data-fx-opacity="${opacity}" data-fx-color="${fx.color}"></div>`;
+        })
+        .join('');
+
+      fxLayer.querySelectorAll('[data-fx-left]').forEach((el) => {
+        el.style.left = el.getAttribute('data-fx-left') || '50%';
+        el.style.top = '54%';
+        el.style.transform = 'translate(-50%, -50%)';
+        el.style.opacity = el.getAttribute('data-fx-opacity') || '1';
+        const color = el.getAttribute('data-fx-color') || '#38bdf8';
+        if (el.hasAttribute('data-fx-size')) {
+          const sz = el.getAttribute('data-fx-size') || '30px';
+          el.style.width = sz;
+          el.style.height = sz;
+          el.style.borderColor = color;
+          el.style.backgroundColor = `${color}22`;
+        } else {
+          el.style.backgroundColor = color;
+          el.style.boxShadow = `0 0 14px ${color}`;
+        }
+      });
+
+      const unitsLayer = document.getElementById('arena-units-layer');
+      const existingMap = new Map();
+      unitsLayer.querySelectorAll('[data-uid]').forEach((el) => {
+        existingMap.set(el.getAttribute('data-uid'), el);
+      });
+
+      const activeIds = new Set(battle.units.map((u) => u.uid));
+      existingMap.forEach((el, uid) => {
+        if (!activeIds.has(uid)) el.remove();
+      });
+
+      for (const u of battle.units) {
+        let card = existingMap.get(u.uid);
+        if (!card) {
+          card = document.createElement('div');
+          card.setAttribute('data-uid', u.uid);
+          card.className = 'absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center cursor-pointer transition-opacity duration-200';
+          card.addEventListener('click', () => {
+            state.selectedUnitId = u.uid;
+            if (u.side === 'player' && u.tp >= MAX_TP && u.alive) {
+              triggerUnionBurst(u);
+            }
+            renderAllUI();
+          });
+          unitsLayer.appendChild(card);
+        }
+
+        const hpPct = Math.max(0, Math.min(100, (u.hp / u.maxHp) * 100));
+        const shieldPct = Math.max(0, Math.min(100, (u.shield / u.maxHp) * 100));
+        const tpPct = Math.max(0, Math.min(100, (u.tp / MAX_TP) * 100));
+        const gaugePct = getPhaseProgressPct(u);
+        const ubReady = u.alive && u.tp >= MAX_TP;
+        const isSelected = state.selectedUnitId === u.uid;
+        const isWindup = u.alive && u.actionPhase === 'WINDUP';
+        const ccLabel = u.alive ? getActiveCcLabel(u) : null;
+
+        const yStagger = (u.slotIndex - 1.5) * 14;
+        const topPct = 54 + yStagger * 0.25;
+
+        const totalOffsetPx = u.lungeOffset + u.knockbackOffset;
+        card.style.left = `calc(${u.visualX.toFixed(2)}% + ${totalOffsetPx.toFixed(1)}px)`;
+        card.style.top = `${topPct}%`;
+        card.style.opacity = u.alive ? '1' : '0.28';
+        card.style.zIndex = isWindup ? '24' : ubReady ? '23' : isSelected ? '20' : '10';
+
+        const ringColor = ubReady
+          ? 'ring-2 ring-amber-300 shadow-[0_0_20px_rgba(251,191,36,0.75)]'
+          : isSelected
+          ? 'ring-2 ring-sky-300'
+          : u.side === 'player'
+          ? 'border-sky-400/60'
+          : 'border-rose-500/60';
+
+        const statusIcons = [];
+        if (ccLabel) statusIcons.push(`⛔${ccLabel}`);
+        if (u.buffs.some((b) => b.type === 'taunt')) statusIcons.push('🛡️Taunt');
+        if (u.buffs.some((b) => b.type === 'haste')) statusIcons.push('⚡Haste');
+        if (u.buffs.some((b) => b.type === 'defUp')) statusIcons.push('▲DEF');
+        if (u.debuffs.some((d) => d.type === 'defDown' || d.type === 'mdefDown')) statusIcons.push('▼DEF');
+        if (u.debuffs.some((d) => d.type === 'slow')) statusIcons.push('🐢Slow');
+        if (u.debuffs.some((d) => d.type === 'burn')) statusIcons.push('🔥Burn');
+
+        const animClass =
+          u.animState === 'windup' || isWindup
+            ? 'anim-windup'
+            : u.animState === 'strike'
+            ? 'anim-strike'
+            : u.animState === 'hit'
+            ? 'anim-hit'
+            : u.animState === 'knockback'
+            ? 'anim-knockback'
+            : 'anim-idle';
+
+        const phaseBarColor =
+          u.actionPhase === 'WINDUP'
+            ? 'bg-sky-300'
+            : u.actionPhase === 'FOLLOWTHROUGH'
+            ? 'bg-amber-400'
+            : 'bg-emerald-400/80';
+
+        const dirSign = u.side === 'player' ? 1 : -1;
+        const spriteStyleVars = `--windup-x:${-6 * dirSign}px; --windup-rot:${-8 * dirSign}deg; --strike-x:${14 * dirSign}px; --strike-rot:${10 * dirSign}deg; --recoil-x:${-9 * dirSign}px; --recoil-rot:${-7 * dirSign}deg; --kb-x:${-14 * dirSign}px; --kb-rot:${-11 * dirSign}deg;`;
+
+        card.innerHTML = `
+          <div class="w-[78px] sm:w-[90px] bg-slate-950/90 border border-slate-700/90 rounded-lg p-1 mb-1 shadow-lg">
+            <div class="flex items-center justify-between text-[9px] leading-none mb-0.5 px-0.5">
+              <span class="font-bold truncate ${u.side === 'player' ? 'text-sky-200' : 'text-rose-200'}">${u.name.split(' ')[0]}</span>
+              <span class="font-mono-num text-slate-300">${Math.ceil(hpPct)}%</span>
+            </div>
+            <div class="relative w-full h-1.5 bg-slate-800 rounded-full overflow-hidden mb-0.5">
+              <div class="h-full ${u.side === 'player' ? 'bg-emerald-400' : 'bg-rose-500'} transition-all duration-100" data-bar-width="${hpPct.toFixed(1)}%"></div>
+              ${shieldPct > 0 ? `<div class="absolute top-0 right-0 h-full bg-cyan-300/85" data-bar-width="${Math.min(100 - hpPct, shieldPct).toFixed(1)}%"></div>` : ''}
+            </div>
+            <div class="w-full h-1 bg-slate-800 rounded-full overflow-hidden mb-0.5">
+              <div class="h-full ${ubReady ? 'bg-amber-300' : 'bg-amber-500/80'} transition-all duration-100" data-bar-width="${tpPct.toFixed(1)}%"></div>
+            </div>
+            <div class="w-full h-[3.5px] bg-slate-900 rounded-full overflow-hidden">
+              <div class="h-full ${phaseBarColor}" data-bar-width="${gaugePct.toFixed(1)}%"></div>
+            </div>
+          </div>
+
+          <div class="relative w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-b from-slate-800/75 via-slate-900/85 to-slate-950/95 border ${ringColor} ${isWindup ? 'unit-windup-glow' : ''} flex items-center justify-center shadow-xl ${!u.alive ? 'grayscale' : ''}" data-sprite-vars="${spriteStyleVars}">
+            ${ubReady ? `<div class="ub-aura-ring absolute left-1/2 top-1/2 w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-dashed border-amber-300/80 pointer-events-none"></div>` : ''}
+            <div class="${animClass}" data-sprite-vars="${spriteStyleVars}">
+              ${renderCharacterSpriteSVG(u, battle.ended && u.alive)}
+            </div>
+            ${ubReady ? `<span class="absolute -top-2 -right-2 px-1.5 py-0.2 rounded bg-amber-400 text-slate-950 font-extrabold text-[9px] shadow">UB</span>` : ''}
+          </div>
+
+          <div class="mt-1 px-1.5 py-0.2 rounded bg-slate-950/85 border border-slate-800 text-[9px] font-mono-num text-slate-300 max-w-[116px] truncate">
+            ${u.positionZone.slice(0, 3).toUpperCase()} • ${getNextLoopStepLabel(u)}
+          </div>
+          ${statusIcons.length > 0 ? `<div class="mt-0.5 text-[9px] font-semibold text-amber-200 bg-slate-950/85 px-1 rounded border border-amber-500/30">${statusIcons.slice(0, 2).join(' ')}</div>` : ''}
+        `;
+      }
+
+      const popupsLayer = document.getElementById('popups-layer');
+      popupsLayer.innerHTML = battle.popups
+        .map((p) => {
+          const progress = p.age / p.duration;
+          const driftY = progress * 34;
+          return `<div class="floating-popup absolute ${p.className}" data-popup-left="${p.xPct.toFixed(2)}%" data-popup-top="${p.offsetY - driftY}">${p.text}</div>`;
+        })
+        .join('');
+
+      renderWindupSpeechBubbles();
+
+      unitsLayer.querySelectorAll('[data-bar-width]').forEach((el) => {
+        el.style.width = el.getAttribute('data-bar-width') || '0%';
+      });
+      unitsLayer.querySelectorAll('[data-sprite-vars]').forEach((el) => {
+        const rawVars = el.getAttribute('data-sprite-vars') || '';
+        rawVars.split(';').forEach((pair) => {
+          const idx = pair.indexOf(':');
+          if (idx > 0) {
+            const prop = pair.slice(0, idx).trim();
+            const val = pair.slice(idx + 1).trim();
+            if (prop.startsWith('--') && val) el.style.setProperty(prop, val);
+          }
+        });
+      });
+      popupsLayer.querySelectorAll('[data-popup-left]').forEach((el) => {
+        el.style.left = el.getAttribute('data-popup-left') || '50%';
+        const topPx = Number(el.getAttribute('data-popup-top') || '0');
+        el.style.top = `calc(44% + ${topPx.toFixed(1)}px)`;
+      });
+    }
+
+    function renderUbDeck() {
+      const deck = document.getElementById('ub-deck');
+      const playerUnits = battle.units.filter((u) => u.side === 'player');
+
+      deck.innerHTML = playerUnits
+        .map((u, idx) => {
+          const tpPct = Math.max(0, Math.min(100, (u.tp / MAX_TP) * 100));
+          const ready = u.alive && u.tp >= MAX_TP && battle.running && !battle.ended;
+          return `
+            <button data-ub-uid="${u.uid}" class="text-left rounded-xl p-2.5 border transition flex flex-col justify-between ${
+              ready
+                ? 'bg-gradient-to-br from-amber-500/25 to-orange-600/20 border-amber-300 shadow-lg shadow-amber-500/15 hover:brightness-110 cursor-pointer'
+                : 'bg-slate-950/75 border-slate-800 opacity-85'
+            } ${!u.alive ? 'opacity-35 cursor-not-allowed' : ''}">
+              <div class="flex items-center justify-between gap-1 mb-1">
+                <span class="text-xs font-extrabold text-white truncate">[${idx + 1}] ${u.name.split(' ')[0]}</span>
+                <span class="text-[10px] font-mono-num font-bold ${ready ? 'text-amber-300' : 'text-slate-400'}">${Math.floor(u.tp)}/${MAX_TP}</span>
+              </div>
+              <div class="text-[11px] font-bold ${ready ? 'text-amber-200' : 'text-slate-300'} truncate mb-1.5">
+                ★ ${u.ub.name}
+              </div>
+              <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div class="h-full ${ready ? 'bg-amber-300' : 'bg-amber-500/75'} transition-all duration-100" data-ub-bar="${tpPct.toFixed(1)}%"></div>
+              </div>
+            </button>
+          `;
+        })
+        .join('');
+
+      deck.querySelectorAll('[data-ub-bar]').forEach((el) => {
+        el.style.width = el.getAttribute('data-ub-bar') || '0%';
+      });
+
+      deck.querySelectorAll('[data-ub-uid]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const uid = btn.getAttribute('data-ub-uid');
+          state.selectedUnitId = uid;
+          const unit = battle.units.find((x) => x.uid === uid);
+          if (unit) triggerUnionBurst(unit);
+          renderAllUI();
+        });
+      });
+    }
+
+    function renderUnitInspector() {
+      const box = document.getElementById('unit-inspector');
+      const unit = battle.units.find((u) => u.uid === state.selectedUnitId) || battle.units[0];
+      if (!unit) return;
+
+      const skillsHtml = Object.entries(unit.autoSkills)
+        .map(([k, sk]) => {
+          const tag = k === 'auto' ? 'AUTO' : k === 'skill1' ? 'SKILL 1' : 'SKILL 2';
+          const wSec = Math.max(PACE_CONFIG.minWindupSec, (sk.windupSec || 0.25) * PACE_CONFIG.phaseDurationMultiplier);
+          const fSec = Math.max(PACE_CONFIG.minFollowThroughSec, (sk.followThroughSec || 0.25) * PACE_CONFIG.phaseDurationMultiplier);
+          return `
+            <div class="bg-slate-950/70 border border-slate-800/90 rounded-xl p-2">
+              <div class="flex items-center justify-between text-[11px]">
+                <span class="font-bold text-sky-300">${tag}: ${sk.name}</span>
+                <span class="text-[10px] font-mono-num text-slate-400">W:${wSec.toFixed(2)}s • F:${fSec.toFixed(2)}s</span>
+              </div>
+              <p class="text-[11px] text-slate-300 mt-0.5 leading-snug">${sk.desc}</p>
+            </div>
+          `;
+        })
+        .join('');
+
+      const passivesHtml = unit.passives
+        .map(
+          (p) => `
+          <div class="bg-slate-950/70 border border-slate-800/90 rounded-xl p-2">
+            <div class="text-[11px] font-bold text-emerald-300">PASSIVE: ${p.name}</div>
+            <p class="text-[11px] text-slate-300 mt-0.5 leading-snug">${p.desc}</p>
+          </div>
+        `
+        )
+        .join('');
+
+      box.innerHTML = `
+        <div class="flex items-start justify-between gap-2 mb-2.5">
+          <div class="flex items-center gap-2.5">
+            <div class="w-12 h-12 rounded-xl bg-slate-950 border border-slate-700 flex items-center justify-center shrink-0">
+              ${renderCharacterSpriteSVG(unit, false)}
+            </div>
+            <div>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <h2 class="font-display text-sm font-extrabold text-white">${unit.name}</h2>
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                  unit.damageType === 'physical'
+                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                    : 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
+                }">${unit.damageType}</span>
+              </div>
+              <div class="text-[11px] text-slate-400">${unit.title} • Zone: <strong class="text-amber-300 uppercase">${unit.positionZone}</strong></div>
+              <div class="text-[10px] text-purple-300 font-semibold">${unit.kitFormat}</div>
+            </div>
+          </div>
+          <div class="text-right font-mono-num text-[11px]">
+            <div class="text-emerald-300 font-bold">${Math.ceil(unit.hp)} / ${unit.maxHp} HP</div>
+            <div class="text-amber-300 font-bold">${Math.floor(unit.tp)} / ${MAX_TP} TP</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-4 gap-1.5 text-center bg-slate-950/80 border border-slate-800 rounded-xl p-2 mb-2.5 font-mono-num text-[10px]">
+          <div><div class="text-slate-400">PATK</div><div class="font-bold text-slate-100">${unit.patk}</div></div>
+          <div><div class="text-slate-400">MATK</div><div class="font-bold text-slate-100">${unit.matk}</div></div>
+          <div><div class="text-slate-400">PDEF/MDEF</div><div class="font-bold text-slate-100">${unit.pdef}/${unit.mdef}</div></div>
+          <div><div class="text-slate-400">SPD/TP×</div><div class="font-bold text-slate-100">${unit.actionSpeed.toFixed(2)}/${unit.tpGainRate.toFixed(2)}</div></div>
+        </div>
+
+        <div class="space-y-2 max-h-[300px] overflow-y-auto pr-0.5">
+          <div class="bg-amber-500/10 border border-amber-400/35 rounded-xl p-2">
+            <div class="flex items-center justify-between text-[11px]">
+              <span class="font-extrabold text-amber-300">★ UNION BURST: ${unit.ub.name}</span>
+              <span class="text-[10px] font-mono-num text-amber-200/80">${(unit.ub.cutsceneKind || 'strike').replace('_', ' ')}</span>
+            </div>
+            <p class="text-[11px] text-slate-200 mt-0.5 leading-snug">${unit.ub.desc}</p>
+          </div>
+
+          ${skillsHtml}
+          ${passivesHtml}
+
+          <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-2 space-y-1">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-purple-300">3-Phase State &amp; Action Loop</div>
+            <div class="text-[11px] text-slate-300">
+              <span class="text-slate-400">Phase:</span>
+              <span class="font-mono-num font-bold text-amber-300">${unit.alive ? unit.actionPhase : 'KO'}</span>
+              ${unit.queuedAction ? `<span class="text-sky-300">(${unit.queuedAction.label} • ${unit.queuedAction.windupSec.toFixed(2)}s W / ${unit.queuedAction.followThroughSec.toFixed(2)}s F)</span>` : ''}
+            </div>
+            <div class="text-[11px] text-slate-300"><span class="text-slate-400">Opening:</span> <span class="font-mono-num text-sky-300">${unit.openingLoop.join(' → ')}</span></div>
+            <div class="text-[11px] text-slate-300"><span class="text-slate-400">Main Loop:</span> <span class="font-mono-num text-amber-300">${unit.mainLoop.join(' → ')}</span> → [Repeat]</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderTelemetry() {
+      const container = document.getElementById('telemetry-bars');
+      const maxDmg = Math.max(1, ...battle.units.map((u) => u.statsTracked.damageDealt));
+      const maxHeal = Math.max(1, ...battle.units.map((u) => u.statsTracked.healingDone));
+
+      container.innerHTML = battle.units
+        .map((u) => {
+          const dmgPct = (u.statsTracked.damageDealt / maxDmg) * 100;
+          const healPct = (u.statsTracked.healingDone / maxHeal) * 100;
+          return `
+            <div class="bg-slate-950/70 border border-slate-800/80 rounded-xl p-2">
+              <div class="flex items-center justify-between text-[11px] mb-1">
+                <span class="font-bold ${u.side === 'player' ? 'text-sky-200' : 'text-rose-200'}">${u.name}</span>
+                <span class="font-mono-num text-[10px] text-slate-400">
+                  DMG <strong class="text-rose-300">${u.statsTracked.damageDealt}</strong> • HEAL <strong class="text-emerald-300">${u.statsTracked.healingDone}</strong> • TP <strong class="text-amber-300">${u.statsTracked.tpGained}</strong>
+                </span>
+              </div>
+              <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden mb-1">
+                <div class="h-full bg-rose-400" data-telem-bar="${dmgPct.toFixed(1)}%"></div>
+              </div>
+              ${u.statsTracked.healingDone > 0 ? `
+                <div class="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+                  <div class="h-full bg-emerald-400" data-telem-bar="${healPct.toFixed(1)}%"></div>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        })
+        .join('');
+
+      container.querySelectorAll('[data-telem-bar]').forEach((el) => {
+        el.style.width = el.getAttribute('data-telem-bar') || '0%';
+      });
+    }
+
+    function renderBattleLog() {
+      const logEl = document.getElementById('battle-log');
+      const colorMap = {
+        ub: 'text-amber-300',
+        skill: 'text-sky-300',
+        heal: 'text-emerald-300',
+        cc: 'text-fuchsia-300',
+        ko: 'text-rose-400 font-bold',
+        system: 'text-purple-300',
+        action: 'text-slate-300',
+      };
+      logEl.innerHTML = battle.logs
+        .map(
+          (entry) => `
+          <div class="leading-snug border-b border-slate-800/50 pb-1">
+            <span class="text-slate-500">[${entry.time}]</span>
+            <span class="${colorMap[entry.category] || 'text-slate-300'}">${entry.message}</span>
+          </div>
+        `
+        )
+        .join('');
+    }
+
+    function renderTeamBuilders() {
+      const playerContainer = document.getElementById('player-team-builder');
+      const enemyContainer = document.getElementById('enemy-team-builder');
+      const dummySelect = document.getElementById('dummy-count-select');
+      const enemyLabel = document.getElementById('enemy-builder-label');
+
+      const optionsHtml = CHARACTER_TEMPLATES.map(
+        (c) => `<option value="${c.id}">${c.name} (${c.positionZone.slice(0, 3).toUpperCase()})</option>`
+      ).join('');
+
+      playerContainer.innerHTML = state.playerSelection
+        .map(
+          (tplId, slotIdx) => `
+          <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-2">
+            <div class="text-[10px] text-slate-400 font-semibold mb-1">Slot ${slotIdx + 1}</div>
+            <select data-side="player" data-slot="${slotIdx}" class="roster-select w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-slate-100">
+              ${optionsHtml}
+            </select>
+          </div>
+        `
+        )
+        .join('');
+
+      playerContainer.querySelectorAll('select.roster-select').forEach((sel) => {
+        const slot = Number(sel.getAttribute('data-slot'));
+        sel.value = state.playerSelection[slot];
+        sel.addEventListener('change', () => {
+          state.playerSelection[slot] = sel.value;
+          initBattle();
+        });
+      });
+
+      if (state.mode === 'dummy') {
+        dummySelect.classList.remove('hidden');
+        dummySelect.value = String(state.dummyCount);
+        enemyLabel.textContent = `Training Dummies (${state.dummyCount})`;
+        enemyContainer.innerHTML = Array.from({ length: state.dummyCount })
+          .map(
+            (_, idx) => `
+            <div class="bg-slate-950/80 border border-amber-500/30 rounded-xl p-2 text-[11px]">
+              <div class="font-bold text-amber-300">Dummy #${idx + 1}</div>
+              <div class="text-[10px] text-slate-400">Sandbox Target • 18,000 HP</div>
+            </div>
+          `
+          )
+          .join('');
+      } else {
+        dummySelect.classList.add('hidden');
+        enemyLabel.textContent = 'Enemy Team (4 Units)';
+        enemyContainer.innerHTML = state.enemySelection
+          .map(
+            (tplId, slotIdx) => `
+            <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-2">
+              <div class="text-[10px] text-slate-400 font-semibold mb-1">Enemy Slot ${slotIdx + 1}</div>
+              <select data-side="enemy" data-slot="${slotIdx}" class="roster-select w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-slate-100">
+                ${optionsHtml}
+              </select>
+            </div>
+          `
+          )
+          .join('');
+
+        enemyContainer.querySelectorAll('select.roster-select').forEach((sel) => {
+          const slot = Number(sel.getAttribute('data-slot'));
+          sel.value = state.enemySelection[slot];
+          sel.addEventListener('change', () => {
+            state.enemySelection[slot] = sel.value;
+            initBattle();
+          });
+        });
+      }
+    }
+
+    function renderCodexModal() {
+      const content = document.getElementById('codex-content');
+      content.innerHTML = CHARACTER_TEMPLATES.map((c) => {
+        const autoEntries = Object.entries(c.autoSkills)
+          .map(([k, v]) => {
+            const wSec = Math.max(PACE_CONFIG.minWindupSec, (v.windupSec || 0.25) * PACE_CONFIG.phaseDurationMultiplier);
+            const fSec = Math.max(PACE_CONFIG.minFollowThroughSec, (v.followThroughSec || 0.25) * PACE_CONFIG.phaseDurationMultiplier);
+            return `<li><strong class="text-sky-300">${k.toUpperCase()} (${v.name} • W:${wSec.toFixed(2)}s / F:${fSec.toFixed(2)}s):</strong> ${v.desc}</li>`;
+          })
+          .join('');
+        const passiveEntries = c.passives
+          .map((p) => `<li><strong class="text-emerald-300">Passive (${p.name}):</strong> ${p.desc}</li>`)
+          .join('');
+
+        return `
+          <div class="bg-slate-950/85 border border-slate-800 rounded-2xl p-3.5 flex flex-col gap-2">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2.5">
+                <div class="w-11 h-11 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center shrink-0">
+                  ${renderCharacterSpriteSVG({ templateId: c.id, side: 'player' }, false)}
+                </div>
+                <div>
+                  <div class="font-display font-bold text-sm text-white">${c.name}</div>
+                  <div class="text-[11px] text-slate-400">${c.title} • <span class="text-amber-300 font-semibold uppercase">${c.positionZone}</span></div>
+                </div>
+              </div>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold ${
+                c.damageType === 'physical' ? 'bg-rose-500/20 text-rose-300' : 'bg-sky-500/20 text-sky-300'
+              }">${c.damageType.toUpperCase()}</span>
+            </div>
+            <div class="text-[10px] font-bold text-purple-300">${c.kitFormat}</div>
+            <ul class="text-[11px] text-slate-300 space-y-1 list-disc pl-4">
+              <li><strong class="text-amber-300">UB (${c.ub.name}):</strong> ${c.ub.desc}</li>
+              ${autoEntries}
+              ${passiveEntries}
+            </ul>
+            <div class="text-[10px] font-mono-num text-slate-400 bg-slate-900/90 rounded-lg p-2">
+              <div>Opening: <span class="text-sky-300">${c.openingLoop.join(' → ')}</span></div>
+              <div>Loop: <span class="text-amber-300">${c.mainLoop.join(' → ')}</span></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderAllUI() {
+      renderArena();
+      renderUbDeck();
+      renderUnitInspector();
+      renderTelemetry();
+    }
+
+    // =========================================================================
+    // 9. EVENT LISTENERS & REQUESTANIMATIONFRAME LOOP
+    // =========================================================================
+    document.getElementById('mode-4v4-btn').addEventListener('click', () => {
+      state.mode = '4v4';
+      document.getElementById('mode-4v4-btn').className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition bg-amber-400 text-slate-950';
+      document.getElementById('mode-dummy-btn').className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-300 hover:text-white';
+      renderTeamBuilders();
+      initBattle();
+    });
+
+    document.getElementById('mode-dummy-btn').addEventListener('click', () => {
+      state.mode = 'dummy';
+      document.getElementById('mode-dummy-btn').className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition bg-amber-400 text-slate-950';
+      document.getElementById('mode-4v4-btn').className = 'px-3 py-1.5 rounded-lg text-xs font-bold transition text-slate-300 hover:text-white';
+      renderTeamBuilders();
+      initBattle();
+    });
+
+    document.getElementById('dummy-count-select').addEventListener('change', (e) => {
+      state.dummyCount = Number(e.target.value) || 4;
+      renderTeamBuilders();
+      initBattle();
+    });
+
+    document.getElementById('pause-toggle-btn').addEventListener('click', (e) => {
+      state.paused = !state.paused;
+      e.target.textContent = state.paused ? 'Resume' : 'Pause';
+      if (!battle.ended) {
+        setBattleStatus(
+          state.paused ? 'PAUSED' : 'LIVE COMBAT',
+          state.paused
+            ? 'bg-amber-500/20 text-amber-300 border-amber-400/40'
+            : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+        );
+      }
+    });
+
+    document.querySelectorAll('.speed-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.speed = Number(btn.getAttribute('data-speed')) || 1;
+        document.querySelectorAll('.speed-btn').forEach((b) => {
+          const active = Number(b.getAttribute('data-speed')) === state.speed;
+          b.className = `speed-btn px-2.5 py-1 rounded-lg text-xs font-mono-num font-bold ${
+            active ? 'bg-amber-400 text-slate-950' : 'text-slate-300 hover:text-white'
+          }`;
+        });
+      });
+    });
+
+    document.getElementById('auto-ub-btn').addEventListener('click', (e) => {
+      state.autoUb = !state.autoUb;
+      e.target.textContent = `AUTO UB: ${state.autoUb ? 'ON' : 'OFF'}`;
+      e.target.className = `px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
+        state.autoUb
+          ? 'bg-amber-500/20 text-amber-300 border-amber-400/50'
+          : 'bg-slate-800 text-slate-300 border-slate-700'
+      }`;
+    });
+
+    document.getElementById('reset-battle-btn').addEventListener('click', initBattle);
+    document.getElementById('overlay-restart-btn').addEventListener('click', initBattle);
+    document.getElementById('clear-log-btn').addEventListener('click', () => {
+      battle.logs = [];
+      renderBattleLog();
+    });
+
+    document.getElementById('preset-balanced-btn').addEventListener('click', () => {
+      state.playerSelection = ['bram_ironclad', 'vespera_nightstep', 'mirella_hexthread', 'talia_dewsong'];
+      state.enemySelection = ['kaelen_ashblade', 'sylas_sunweaver', 'orin_pyrecaster', 'lyra_windpiercer'];
+      renderTeamBuilders();
+      initBattle();
+    });
+
+    document.getElementById('preset-rush-btn').addEventListener('click', () => {
+      state.playerSelection = ['bram_ironclad', 'kaelen_ashblade', 'vespera_nightstep', 'sylas_sunweaver'];
+      state.enemySelection = ['bram_ironclad', 'mirella_hexthread', 'orin_pyrecaster', 'talia_dewsong'];
+      renderTeamBuilders();
+      initBattle();
+    });
+
+    document.getElementById('open-codex-btn').addEventListener('click', () => {
+      renderCodexModal();
+      document.getElementById('codex-modal').classList.remove('hidden');
+    });
+
+    document.getElementById('close-codex-btn').addEventListener('click', () => {
+      document.getElementById('codex-modal').classList.add('hidden');
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (['1', '2', '3', '4'].includes(e.key)) {
+        const idx = Number(e.key) - 1;
+        const playerUnits = battle.units.filter((u) => u.side === 'player');
+        if (playerUnits[idx]) {
+          state.selectedUnitId = playerUnits[idx].uid;
+          triggerUnionBurst(playerUnits[idx]);
+          renderAllUI();
+        }
+      } else if (e.code === 'Space') {
+        e.preventDefault();
+        document.getElementById('pause-toggle-btn').click();
+      }
+    });
+
+    let lastTimestamp = performance.now();
+    function mainLoop(now) {
+      const rawDt = Math.min(0.05, Math.max(0, (now - lastTimestamp) / 1000));
+      lastTimestamp = now;
+
+      updateBattle(rawDt);
+      renderAllUI();
+
+      requestAnimationFrame(mainLoop);
+    }
+
+    renderTeamBuilders();
+    initBattle();
+    requestAnimationFrame(mainLoop);
+  </script>
+</body>
+</html>
