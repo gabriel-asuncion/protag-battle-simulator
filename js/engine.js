@@ -41,11 +41,16 @@ function createCombatUnit(templateId, side, slotIndex, customZoneOverride = null
     slotIndex,
     positionZone: zoneObj.id,
     zoneIndex: zoneObj.index,
+    distance: tpl.distance ?? zoneObj.rangeCenter,
+    attackRange: typeof tpl.attackRange === 'number' ? tpl.attackRange : null,
+    delayedEntry: Boolean(tpl.delayedEntry),
+    enteringBattle: false,
     alive: true,
 
     maxHp: tpl.stats.maxHp,
     hp: tpl.stats.maxHp,
     shield: 0,
+    magicShield: 0,
     patk: tpl.stats.patk,
     matk: tpl.stats.matk,
     pdef: tpl.stats.pdef,
@@ -145,6 +150,21 @@ function createCombatUnit(templateId, side, slotIndex, customZoneOverride = null
       } else if (unit.templateId === 'elara_moonbloom') {
         unit.buffs.push({ type: 'healUp', val: 0.24, remaining: 999 });
         gainTp(unit, 160, false);
+      } else if (unit.templateId === 'yukari') {
+        unit.buffs.push({ type: 'mdefUp', val: 0.32, remaining: 999 });
+      } else if (unit.templateId === 'ninon') {
+        unit.buffs.push({ type: 'patkUp', val: 0.20, remaining: 999 });
+        unit.critRate += 0.10;
+      } else if (unit.templateId === 'nozomi') {
+        unit.buffs.push({ type: 'pdefUp', val: 0.30, remaining: 999 });
+      } else if (unit.templateId === 'tamaki') {
+        unit.buffs.push({ type: 'patkUp', val: 0.22, remaining: 999 });
+      } else if (unit.templateId === 'monica') {
+        unit.buffs.push({ type: 'patkUp', val: 0.20, remaining: 999 });
+      } else if (unit.templateId === 'kyouka') {
+        unit.buffs.push({ type: 'matkUp', val: 0.22, remaining: 999 });
+      } else if (unit.templateId === 'tsumugi') {
+        unit.buffs.push({ type: 'pdefUp', val: 0.30, remaining: 999 });
       }
     }
   }
@@ -152,12 +172,117 @@ function createCombatUnit(templateId, side, slotIndex, customZoneOverride = null
   return unit;
 }
 
+const SMART_ENEMY_STRATEGIES = [
+  {
+    id: 'formation_1_2_1',
+    name: '1-2-1 Formation',
+    desc: '1 Front • 2 Center • 1 Back',
+    slots: [
+      (t) => ['vanguard', 'frontline'].includes(t.positionZone),
+      (t) => ['center', 'pivot', 'flank'].includes(t.positionZone),
+      (t) => ['center', 'pivot', 'flank'].includes(t.positionZone),
+      (t) => ['backline', 'rearguard'].includes(t.positionZone),
+    ],
+  },
+  {
+    id: 'formation_2_2',
+    name: '2-2 Wall & Siege',
+    desc: '2 Front • 2 Back',
+    slots: [
+      (t) => t.positionZone === 'vanguard',
+      (t) => ['vanguard', 'frontline'].includes(t.positionZone),
+      (t) => t.positionZone === 'backline',
+      (t) => ['backline', 'rearguard'].includes(t.positionZone),
+    ],
+  },
+  {
+    id: 'balanced_core',
+    name: 'Balanced Core',
+    desc: 'Tank • Skirmisher • Utility • Support',
+    slots: [
+      (t) => t.positionZone === 'vanguard',
+      (t) => ['frontline', 'flank'].includes(t.positionZone),
+      (t) => ['center', 'pivot'].includes(t.positionZone),
+      (t) => ['backline', 'rearguard'].includes(t.positionZone),
+    ],
+  },
+  {
+    id: 'aggressive_rush',
+    name: 'Aggressive Rush',
+    desc: 'High-Tempo Frontline & Flank Dive',
+    slots: [
+      (t) => t.positionZone === 'frontline',
+      (t) => t.positionZone === 'flank',
+      (t) => ['frontline', 'flank', 'pivot'].includes(t.positionZone),
+      (t) => ['backline', 'rearguard'].includes(t.positionZone) && t.stats.patk + t.stats.matk >= 380,
+    ],
+  },
+  {
+    id: 'arcane_cleave',
+    name: 'Arcane Cleave',
+    desc: 'Vanguard + Triple Magic Synergy',
+    slots: [
+      (t) => ['vanguard', 'frontline'].includes(t.positionZone),
+      (t) => t.damageType === 'magical' && ['center', 'pivot'].includes(t.positionZone),
+      (t) => t.damageType === 'magical' && t.positionZone === 'backline',
+      (t) => t.damageType === 'magical' && ['center', 'pivot', 'rearguard'].includes(t.positionZone),
+    ],
+  },
+  {
+    id: 'protect_carry',
+    name: 'Protect the Carry',
+    desc: 'Double Sustain + Hyper-Carry',
+    slots: [
+      (t) => t.positionZone === 'vanguard',
+      (t) => t.positionZone === 'center',
+      (t) => t.positionZone === 'rearguard' && t.damageType === 'magical',
+      (t) => ['backline', 'rearguard'].includes(t.positionZone) && Math.max(t.stats.patk, t.stats.matk) >= 340,
+    ],
+  },
+];
+
+function applySmartEnemyStrategy() {
+  const pool = Object.values(CHARACTER_TEMPLATES).filter((t) => t.id !== 'training_dummy');
+  if (pool.length < 4) return null;
+
+  const candidates = SMART_ENEMY_STRATEGIES.filter((s) => s.id !== state.lastEnemyStrategyId);
+  const strategy = candidates[Math.floor(Math.random() * candidates.length)] || SMART_ENEMY_STRATEGIES[0];
+  state.lastEnemyStrategyId = strategy.id;
+  state.currentEnemyStrategy = strategy;
+
+  const picked = [];
+  const usedIds = new Set();
+
+  for (const predicate of strategy.slots) {
+    let matches = pool.filter((t) => !usedIds.has(t.id) && predicate(t));
+    if (!matches.length) {
+      matches = pool.filter((t) => !usedIds.has(t.id));
+    }
+    const chosen = matches[Math.floor(Math.random() * matches.length)];
+    if (chosen) {
+      usedIds.add(chosen.id);
+      picked.push(chosen.id);
+    }
+  }
+
+  state.enemySelection = picked;
+  return strategy;
+}
+
 function navigateToPage(pageName) {
   state.page = pageName;
   if (pageName === 'battle') {
     state.paused = false;
     state.ubPauseRemaining = 0;
-    initBattle({ autoStart: true });
+    if (state.mode === '4v4') {
+      const strat = applySmartEnemyStrategy();
+      initBattle({ autoStart: true });
+      if (strat && typeof addLog === 'function') {
+        addLog('system', `⚔ Enemy Strategy: ${strat.name} (${strat.desc})`);
+      }
+    } else {
+      initBattle({ autoStart: true });
+    }
   } else {
     state.ubPauseRemaining = 0;
     battle.running = false;
@@ -202,8 +327,15 @@ function initBattle(opts = {}) {
   if (autoStart) {
     for (const u of units) {
       const rc = getUnitRangeCenter(u);
-      u.posX = u.side === 'player' ? -rc - 650 : rc + 650;
-      u.visualX = u.side === 'player' ? -8 : 108;
+      if (u.delayedEntry) {
+        u.posX = u.side === 'player' ? -rc - 1250 : rc + 1250;
+        u.visualX = u.side === 'player' ? -18 : 118;
+        u.enteringBattle = true;
+      } else {
+        u.posX = u.side === 'player' ? -rc - 650 : rc + 650;
+        u.visualX = u.side === 'player' ? -8 : 108;
+        u.enteringBattle = false;
+      }
       u.animState = 'walk';
     }
   }
@@ -306,12 +438,15 @@ function getEffectiveStats(unit) {
       pdefMult += b.val;
       mdefMult += b.val;
     }
+    if (b.type === 'pdefUp') pdefMult += b.val;
+    if (b.type === 'mdefUp') mdefMult += b.val;
     if (b.type === 'haste') hasteMult += b.val;
     if (b.type === 'healUp') healMult += b.val;
     if (b.type === 'critUp') bonusCrit += b.val;
   }
 
   for (const d of unit.debuffs) {
+    if (d.type === 'matkDown') matkMult = Math.max(0.25, matkMult - d.val);
     if (d.type === 'defDown') pdefMult = Math.max(0.25, pdefMult - d.val);
     if (d.type === 'mdefDown') mdefMult = Math.max(0.25, mdefMult - d.val);
     if (d.type === 'slow') hasteMult = Math.max(0.35, hasteMult - d.val);
@@ -343,18 +478,20 @@ function getEngagementPosition(unit) {
 }
 
 function getUnitRangeCenter(unit) {
+  if (typeof unit.distance === 'number') return unit.distance;
   const z = POSITION_ZONES.find((p) => p.id === unit.positionZone);
   return z ? z.rangeCenter : 465;
 }
 
 function getUnitAttackRange(unit) {
+  if (typeof unit.attackRange === 'number') return unit.attackRange;
   // Position value (rangeCenter) directly determines the unit's attack range
   return Math.max(220, getUnitRangeCenter(unit) + 140);
 }
 
 function isTargetInRange(unit) {
-  const enemies = getLivingUnits(unit.side === 'player' ? 'enemy' : 'player');
-  if (!enemies.length) return true;
+  const enemies = getLivingUnits(unit.side === 'player' ? 'enemy' : 'player').filter((e) => !e.enteringBattle);
+  if (!enemies.length) return false;
   const nearestDist = Math.min(...enemies.map((e) => Math.abs((e.posX ?? 0) - (unit.posX ?? 0))));
   return nearestDist <= getUnitAttackRange(unit);
 }
@@ -371,6 +508,12 @@ function updateFrontShiftAndVisualPositions(dt, isEntrance = false) {
 
     let isMoving = false;
     if (isEntrance) {
+      if (u.enteringBattle) {
+        u.targetVisualX = 50 + (u.posX / 1000) * 40;
+        u.visualX = u.targetVisualX;
+        u.animState = 'walk';
+        continue;
+      }
       const homeX = u.side === 'player' ? -rc : rc;
       const diff = homeX - u.posX;
       const step = Math.sign(diff) * Math.min(Math.abs(diff), 680 * dt);
@@ -382,7 +525,28 @@ function updateFrontShiftAndVisualPositions(dt, isEntrance = false) {
       continue;
     }
 
-    const enemies = getLivingUnits(u.side === 'player' ? 'enemy' : 'player');
+    if (u.enteringBattle) {
+      const homeX = u.side === 'player' ? -rc : rc;
+      const diff = homeX - u.posX;
+      const rushSpeed = 980;
+      const step = Math.sign(diff) * Math.min(Math.abs(diff), rushSpeed * dt);
+      u.posX += step;
+      u.targetVisualX = 50 + (u.posX / 1000) * 40;
+      u.visualX += (u.targetVisualX - u.visualX) * Math.min(1, dt * 12);
+      u.animState = 'walk';
+
+      if (Math.abs(homeX - u.posX) <= 8) {
+        u.posX = homeX;
+        u.enteringBattle = false;
+        addLog('skill', `💨 ${u.name} rushed late into the frontline!`);
+        if (battle.running && u.actionPhase === 'IDLE') {
+          stepPredeterminedLoop(u);
+        }
+      }
+      continue;
+    }
+
+    const enemies = getLivingUnits(u.side === 'player' ? 'enemy' : 'player').filter((e) => !e.enteringBattle);
     if (battle.running && enemies.length > 0 && u.actionPhase === 'IDLE' && !isUnitIncapacitated(u)) {
       const nearestEnemy = [...enemies].sort(
         (a, b) => Math.abs((a.posX ?? 0) - u.posX) - Math.abs((b.posX ?? 0) - u.posX)
@@ -390,7 +554,8 @@ function updateFrontShiftAndVisualPositions(dt, isEntrance = false) {
       const dist = Math.abs((nearestEnemy.posX ?? 0) - u.posX);
       const atkRange = getUnitAttackRange(u);
       if (dist > atkRange) {
-        const dir = u.side === 'player' ? 1 : -1;
+        const rawDiff = (nearestEnemy.posX ?? 0) - u.posX;
+        const dir = rawDiff !== 0 ? Math.sign(rawDiff) : u.side === 'player' ? 1 : -1;
         const moveSpeed = 240 * u.actionSpeed;
         u.posX += dir * Math.min(dist - atkRange + 4, moveSpeed * dt);
         u.posX = Math.max(-920, Math.min(920, u.posX));
@@ -425,18 +590,59 @@ function updateFrontShiftAndVisualPositions(dt, isEntrance = false) {
   }
 }
 
-function selectTargets(attacker, rule, count = 1) {
-  const enemies = getLivingUnits(attacker.side === 'player' ? 'enemy' : 'player');
+function selectTargets(attacker, rule, count = 1, maxRange = 750) {
+  const enemies = getLivingUnits(attacker.side === 'player' ? 'enemy' : 'player').filter((e) => !e.enteringBattle);
   if (!enemies.length) return [];
 
-  const taunters = enemies.filter((e) => e.buffs.some((b) => b.type === 'taunt'));
-  const byFront = [...enemies].sort((a, b) => a.zoneIndex - b.zoneIndex || a.slotIndex - b.slotIndex);
+  const taunters = enemies.filter((e) =>
+    e.buffs.some(
+      (b) =>
+        b.type === 'taunt' &&
+        (typeof b.range !== 'number' || Math.abs((e.posX ?? 0) - (attacker.posX ?? 0)) <= b.range)
+    )
+  );
+  const frontSign = attacker.side === 'player' ? 1 : -1;
+  const fallbackEnemyX = attacker.side === 'player' ? 300 : -300;
+  const byFront = [...enemies].sort(
+    (a, b) =>
+      frontSign * ((a.posX ?? fallbackEnemyX) - (b.posX ?? fallbackEnemyX)) ||
+      a.zoneIndex - b.zoneIndex ||
+      a.slotIndex - b.slotIndex
+  );
 
-  if (rule === 'nearest') {
+  if (rule === 'nearest' || rule === 'frontmost') {
     if (taunters.length > 0 && count === 1) {
-      return [taunters.sort((a, b) => a.zoneIndex - b.zoneIndex)[0]];
+      return [
+        taunters.sort(
+          (a, b) =>
+            frontSign * ((a.posX ?? fallbackEnemyX) - (b.posX ?? fallbackEnemyX)) ||
+            a.zoneIndex - b.zoneIndex
+        )[0],
+      ];
     }
     return byFront.slice(0, count);
+  }
+  if (rule === 'frontline_range') {
+    const inRange = byFront.filter(
+      (e) => Math.abs((e.posX ?? 0) - (attacker.posX ?? 0)) <= maxRange
+    );
+    return inRange.length > 0 ? inRange : byFront.slice(0, 1);
+  }
+  if (rule === 'frontline_aoe_50') {
+    const frontTarget = byFront[0];
+    if (!frontTarget) return [];
+    const frontX = frontTarget.posX ?? 0;
+    const inFrontCluster = byFront.filter((e) => Math.abs((e.posX ?? 0) - frontX) <= maxRange);
+    return inFrontCluster.length > 0 ? inFrontCluster : [frontTarget];
+  }
+  if (rule === 'second_nearest') {
+    if (byFront.length >= 2) return [byFront[1]];
+    return byFront.slice(0, 1);
+  }
+  if (rule === 'highest_matk') {
+    return [...enemies]
+      .sort((a, b) => getEffectiveStats(b).matk - getEffectiveStats(a).matk || b.matk - a.matk)
+      .slice(0, count);
   }
   if (rule === 'lowest_hp') {
     return [...enemies].sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp).slice(0, count);
@@ -451,10 +657,14 @@ function selectTargets(attacker, rule, count = 1) {
   return byFront.slice(0, count);
 }
 
-function selectAllies(caster, rule, count = 1) {
-  const allies = getLivingUnits(caster.side);
+function selectAllies(caster, rule, count = 1, maxRange = 200) {
+  const allies = getLivingUnits(caster.side).filter((a) => !a.enteringBattle);
   if (!allies.length) return [];
   if (rule === 'all_allies') return allies;
+  if (rule === 'allies_in_range') {
+    const inRange = allies.filter((a) => Math.abs((a.posX ?? 0) - (caster.posX ?? 0)) <= maxRange);
+    return inRange.length > 0 ? inRange : [caster];
+  }
   if (rule === 'lowest_hp_pct') {
     return [...allies].sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp).slice(0, count);
   }
@@ -462,6 +672,11 @@ function selectAllies(caster, rule, count = 1) {
     return [...allies]
       .sort((a, b) => Math.max(b.patk, b.matk) - Math.max(a.patk, a.matk))
       .slice(0, count);
+  }
+  if (rule === 'lowest_tp') {
+    const teammates = allies.filter((a) => a.uid !== caster.uid);
+    const pool = teammates.length > 0 ? teammates : allies;
+    return [...pool].sort((a, b) => a.tp - b.tp).slice(0, count);
   }
   if (rule === 'self') return [caster];
   return allies.slice(0, count);
@@ -521,6 +736,14 @@ function resolveActionFxKey(unit, kind, isUb = false) {
     ignis_emberheart: 'orin',
     sylvia_frostbow: 'lyra',
     elara_moonbloom: 'talia',
+    yukari: 'talia',
+    ninon: 'kaelen',
+    llima: 'bram',
+    nozomi: 'sylas',
+    tamaki: 'vespera',
+    monica: 'kaelen',
+    kyouka: 'orin',
+    tsumugi: 'mirella',
     training_dummy: 'dummy',
   };
   const p = prefixMap[unit?.templateId] || 'bram';
@@ -552,13 +775,51 @@ function setUnitAnim(unit, stateName, duration = 0.35) {
   unit.animTimer = duration;
 }
 
-function applyCcDebuff(target, ccType, durationSec, sourceName) {
+function applyCcDebuff(target, ccType, durationSec, sourceName, options = {}) {
   if (!target || !target.alive) return;
   target.debuffs.push({ type: ccType, val: 1, remaining: durationSec });
   const labelMap = { stun: 'STUN', knockback: 'KNOCKBACK', silence: 'SILENCE' };
   const label = labelMap[ccType] || ccType.toUpperCase();
-  spawnPopup(target, `${label}!`, 'text-fuchsia-300 font-extrabold text-xs', -12);
+  if (!options.silentPopup) {
+    spawnPopup(target, `${label}!`, 'text-fuchsia-300 font-extrabold text-xs', -12);
+  }
   interruptActiveWindupIfAny(target, `${sourceName} (${label})`);
+}
+
+function displaceUnit(source, target, deltaWorldUnits, options = {}) {
+  if (!source || !target || !target.alive) return 0;
+  const forwardDir = source.side === 'player' ? 1 : -1;
+  const sourceX = typeof source.posX === 'number' ? source.posX : source.side === 'player' ? -200 : 200;
+  const currentX = typeof target.posX === 'number' ? target.posX : target.side === 'player' ? -200 : 200;
+
+  let nextX = currentX + forwardDir * deltaWorldUnits;
+  // Prevent pulls (negative deltaWorldUnits) from dragging an enemy past the caster's back
+  if (deltaWorldUnits < 0) {
+    const minFrontGap = 55;
+    if (forwardDir === 1 && currentX >= sourceX) {
+      nextX = Math.max(sourceX + minFrontGap, nextX);
+    } else if (forwardDir === -1 && currentX <= sourceX) {
+      nextX = Math.min(sourceX - minFrontGap, nextX);
+    }
+  }
+  nextX = Math.max(-920, Math.min(920, nextX));
+  const actualDelta = nextX - currentX;
+  target.posX = nextX;
+
+  const impulseSign = actualDelta !== 0 ? Math.sign(actualDelta) : forwardDir * Math.sign(deltaWorldUnits || 1);
+  const visualKick = options.knockbackPx ?? Math.min(55, Math.abs(actualDelta) * 0.25);
+  if (visualKick > 0) {
+    target.knockbackOffset += impulseSign * visualKick;
+  }
+
+  const staggerSec = options.ccDuration ?? (Math.abs(deltaWorldUnits) >= 120 ? 0.50 : 0.35);
+  if (staggerSec > 0) {
+    applyCcDebuff(target, 'knockback', staggerSec, options.sourceName || source.name, {
+      silentPopup: Boolean(options.silentPopup),
+    });
+  }
+  setUnitAnim(target, 'knockback', Math.max(0.35, staggerSec));
+  return Math.round(Math.abs(actualDelta));
 }
 
 function showUbCutscene(caster, affectedUnits = []) {
@@ -639,7 +900,7 @@ function dealDamage(attacker, defender, rawMultiplier, damageType, options = {})
 
   const critChance = Math.min(0.95, atkEff.critRate + (options.bonusCrit || 0));
   const isCrit = Math.random() < critChance;
-  const critMultiplier = isCrit ? attacker.critMult : 1;
+  const critMultiplier = isCrit ? (options.critMultOverride ?? attacker.critMult) : 1;
   const damageDealtMultiplier = 1 + (options.damageDealtBonus || 0);
 
   // Master Formula: floor((Base Damage * Crit Multiplier * Damage Dealt Multiplier) / (1 + max(0, Effective Defense) / 100)) - Damage Barriers
@@ -649,9 +910,16 @@ function dealDamage(attacker, defender, rawMultiplier, damageType, options = {})
   );
 
   let absorbed = 0;
-  if (defender.shield > 0) {
-    absorbed = Math.min(defender.shield, mitigatedDmg);
-    defender.shield -= absorbed;
+  if (damageType === 'magical' && defender.magicShield > 0) {
+    const magicAbsorbed = Math.min(defender.magicShield, mitigatedDmg);
+    defender.magicShield -= magicAbsorbed;
+    absorbed += magicAbsorbed;
+  }
+  const remainingAfterMagic = Math.max(0, mitigatedDmg - absorbed);
+  if (defender.shield > 0 && remainingAfterMagic > 0) {
+    const generalAbsorbed = Math.min(defender.shield, remainingAfterMagic);
+    defender.shield -= generalAbsorbed;
+    absorbed += generalAbsorbed;
   }
 
   const finalDmg = Math.max(0, mitigatedDmg - absorbed);
@@ -661,11 +929,14 @@ function dealDamage(attacker, defender, rawMultiplier, damageType, options = {})
   attacker.statsTracked.damageDealt += finalDmg;
   defender.statsTracked.damageTaken += mitigatedDmg;
 
-  if (options.knockbackPx) {
-    const dir = attacker.side === 'player' ? 1 : -1;
-    defender.knockbackOffset += dir * options.knockbackPx;
-    setUnitAnim(defender, 'knockback', 0.35);
-    interruptActiveWindupIfAny(defender, `${attacker.name} (Knockback)`);
+  if (options.knockbackPos || options.knockbackPx) {
+    const worldShift = options.knockbackPos ?? Math.round((options.knockbackPx || 0) * 2.5);
+    displaceUnit(attacker, defender, worldShift, {
+      knockbackPx: options.knockbackPx,
+      ccDuration: options.knockbackDuration ?? 0.35,
+      sourceName: attacker.name,
+      silentPopup: Boolean(options.silentDisplacementPopup),
+    });
   } else {
     setUnitAnim(defender, 'hit', 0.26);
   }
@@ -734,6 +1005,15 @@ function grantShield(caster, target, amount) {
   spawnPopup(target, `+${finalShield}`, 'pcrd-num-shield font-mono-num text-xl sm:text-2xl', -26);
 }
 
+function grantMagicShield(caster, target, amount) {
+  if (!target || !target.alive) return;
+  const eff = getEffectiveStats(caster);
+  const finalShield = Math.max(25, Math.round(amount * eff.healMult));
+  target.magicShield += finalShield;
+  caster.statsTracked.shieldGranted += finalShield;
+  spawnPopup(target, `+${finalShield} M.WARD`, 'pcrd-num-shield font-mono-num text-lg sm:text-xl', -28);
+}
+
 function triggerUnionBurst(unit) {
   if (!battle.running || battle.ended || !unit || !unit.alive) return;
   if (unit.tp < MAX_TP) return;
@@ -752,7 +1032,13 @@ function triggerUnionBurst(unit) {
     unit.ub.cutsceneKind === 'ally_support'
       ? selectAllies(unit, 'all_allies')
       : unit.ub.cutsceneKind === 'aoe_offense'
-      ? selectTargets(unit, 'all_enemies')
+      ? typeof unit.ub.aoeRange === 'number'
+        ? selectTargets(unit, 'frontline_aoe_50', 99, unit.ub.aoeRange)
+        : typeof unit.ub.range === 'number'
+        ? selectTargets(unit, 'frontline_range', 99, unit.ub.range)
+        : selectTargets(unit, 'all_enemies')
+      : unit.ub.targetRule === 'highest_matk'
+      ? selectTargets(unit, 'highest_matk', 1)
       : selectTargets(unit, 'nearest', 1);
 
   unit.queuedAction = {
@@ -774,6 +1060,9 @@ function triggerUnionBurst(unit) {
   ttl: ubBubbleDur,
   };
   setUnitAnim(unit, 'windup', ubWindup);
+  if (typeof playUnitSkillVo === 'function') {
+    playUnitSkillVo(unit, 'ub', unit.ub, true);
+  }
 
   // Emphasize Union Burst by briefly pausing other combatant actions while cutscene/UB plays
   state.ubPauseRemaining = Math.max(state.ubPauseRemaining, 0.85);
@@ -832,6 +1121,9 @@ function triggerUnionBurst(unit) {
   ttl: bubbleLinger,
   };
   setUnitAnim(unit, 'windup', windupSec);
+  if (isSkill && typeof playUnitSkillVo === 'function') {
+    playUnitSkillVo(unit, resolvedKey, skillDef, false);
+  }
   }
 
   function jumpToNextWindupAction() {
@@ -877,9 +1169,14 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
   unit.lungeOffset = dir * (isUb ? 26 : 16);
   setUnitAnim(unit, 'strike', isUb ? 0.45 : 0.32);
 
-  const sk = isUb ? unit.ub : unit.autoSkills[
-    Object.keys(unit.autoSkills).find((k) => unit.autoSkills[k].action === actionCode) || 'auto'
-  ];
+  const skillKey = isUb
+    ? 'ub'
+    : Object.keys(unit.autoSkills).find((k) => unit.autoSkills[k].action === actionCode) || 'auto';
+  const sk = isUb ? unit.ub : unit.autoSkills[skillKey];
+
+  if (typeof playUnitSkillSfx === 'function') {
+    playUnitSkillSfx(unit, skillKey, sk, isUb);
+  }
 
   switch (actionCode) {
     case 'phys_nearest': {
@@ -912,14 +1209,17 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
       if (t) {
         spawnFx('slash', unit, t, '#f59e0b');
         const d = dealDamage(unit, t, sk.mult || 1.4, 'physical', {
-          knockbackPx: sk.knockbackPx || 18,
+          knockbackPos: sk.knockbackPos || 55,
+          knockbackPx: sk.knockbackPx || 24,
+          knockbackDuration: 0.35,
+          silentDisplacementPopup: true,
           baseHitTp: sk.baseHitTp || 115,
           label: skillLabel,
         });
         if (t.alive) {
           t.debuffs.push({ type: 'defDown', val: sk.shredPct || 0.2, remaining: 5 });
         }
-        addLog('skill', `${unit.name} used ${skillLabel} on ${t.name} (${d} DMG, DEF shred).`);
+        addLog('skill', `${unit.name} used ${skillLabel} on ${t.name} (${d} DMG, Knockback & DEF shred).`);
       }
       break;
     }
@@ -935,6 +1235,175 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
         if (leech > 0) healUnit(unit, unit, leech, skillLabel);
         addLog('skill', `${unit.name} drained ${d} DMG with ${skillLabel} (stole ${leech} HP).`);
       }
+      break;
+    }
+    case 'phys_front_aoe_stun': {
+      const targets = selectTargets(unit, 'frontline_range', 99, sk.range || 280);
+      for (const t of targets) {
+        spawnFx('slash', unit, t, '#f472b6');
+        dealDamage(unit, t, sk.mult || 1.35, 'physical', {
+          ccType: 'stun',
+          ccDuration: sk.stunSec || 1.5,
+          baseHitTp: sk.baseHitTp || 112,
+          label: skillLabel,
+        });
+      }
+      addLog('skill', `${unit.name} unleashed ${skillLabel} across ${targets.length} frontline enemy(s) (280 range, Stun ${sk.stunSec || 1.5}s)!`);
+      break;
+    }
+    case 'heal_allies_range': {
+      const allies = selectAllies(unit, 'allies_in_range', 99, sk.range || 200);
+      for (const a of allies) {
+        spawnFx('orb', unit, a, '#34d399');
+        healUnit(unit, a, unit.matk * (sk.healMult || 1.25), skillLabel);
+      }
+      addLog('skill', `${unit.name} restored HP to ${allies.length} ally(s) within ${sk.range || 200} range with ${skillLabel}!`);
+      break;
+    }
+    case 'phys_aoe_750_kill_tp': {
+      const targets = selectTargets(unit, 'frontline_range', 99, sk.range || 750);
+      let killCount = 0;
+      for (const t of targets) {
+        const wasAlive = t.alive;
+        spawnFx('slash', unit, t, '#f97316');
+        const d = dealDamage(unit, t, sk.mult || 1.45, 'physical', {
+          baseHitTp: sk.baseHitTp || 105,
+          label: skillLabel,
+        });
+        if (wasAlive && !t.alive) {
+          killCount++;
+        }
+        addLog('skill', `${unit.name} swept ${t.name} with ${skillLabel} for ${d} DMG.`);
+      }
+      if (killCount > 0) {
+        const recovered = gainTp(unit, (sk.killTp || 320) * killCount, true);
+        addLog('skill', `★ ${unit.name} recovered +${recovered} TP from defeating ${killCount} enemy(s) with ${skillLabel}!`);
+      }
+      break;
+    }
+    case 'llima_opening_rush': {
+      const [t] = selectTargets(unit, 'frontmost', 1);
+      unit.buffs.push({ type: 'pdefUp', val: sk.pdefPct || 0.40, remaining: 7 });
+      spawnPopup(unit, '+PDEF', 'text-sky-300 font-bold text-xs', -22);
+      if (t) {
+        spawnFx('slash', unit, t, '#f472b6');
+        const d = dealDamage(unit, t, sk.mult || 1.60, 'physical', {
+          knockbackPos: 65,
+          knockbackPx: 28,
+          knockbackDuration: 0.35,
+          silentDisplacementPopup: true,
+          baseHitTp: sk.baseHitTp || 125,
+          label: skillLabel,
+        });
+        addLog('skill', `${unit.name} slammed into ${t.name} with ${skillLabel} (${d} DMG, Knockback & +PDEF)!`);
+      } else {
+        addLog('skill', `${unit.name} charged into the frontline with ${skillLabel} (+PDEF)!`);
+      }
+      break;
+    }
+    case 'phys_front_stun': {
+      const [t] = selectTargets(unit, 'frontmost', 1);
+      if (t) {
+        spawnFx('slash', unit, t, '#f472b6');
+        const d = dealDamage(unit, t, sk.mult || 1.45, 'physical', {
+          ccType: 'stun',
+          ccDuration: sk.stunSec || 1.0,
+          baseHitTp: sk.baseHitTp || 112,
+          label: skillLabel,
+        });
+        addLog('skill', `${unit.name} bashed ${t.name} with ${skillLabel} (${d} DMG, Stun ${sk.stunSec || 1.0}s)!`);
+      }
+      break;
+    }
+    case 'phys_front_knockback': {
+      const [t] = selectTargets(unit, 'frontmost', 1);
+      if (t) {
+        spawnFx('slash', unit, t, '#ef4444');
+        const kbDist = sk.knockbackPos || 180;
+        const d = dealDamage(unit, t, sk.mult || 1.55, 'physical', {
+          baseHitTp: sk.baseHitTp || 115,
+          label: skillLabel,
+        });
+        const moved = t.alive
+          ? displaceUnit(unit, t, kbDist, {
+              knockbackPx: sk.knockbackPx || 45,
+              ccDuration: 0.55,
+              sourceName: unit.name,
+            })
+          : 0;
+        addLog('skill', `${unit.name} struck ${t.name} with ${skillLabel} (${d} DMG, Knockback ${moved || kbDist})!`);
+      }
+      break;
+    }
+    case 'phys_highest_matk_debuff': {
+      const [t] = selectTargets(unit, 'highest_matk', 1);
+      if (t) {
+        spawnFx('slash', unit, t, '#c084fc');
+        const d = dealDamage(unit, t, sk.mult || 1.55, 'physical', {
+          baseHitTp: sk.baseHitTp || 112,
+          label: skillLabel,
+        });
+        if (t.alive) {
+          t.debuffs.push({ type: 'matkDown', val: sk.matkShredPct || 0.25, remaining: 6 });
+          spawnPopup(t, '-MATK', 'text-purple-300 font-bold text-xs', -22);
+        }
+        addLog('skill', `${unit.name} pounced on ${t.name} with ${skillLabel} (${d} DMG, -MATK)!`);
+      }
+      break;
+    }
+    case 'steal_tp_highest_matk': {
+      const [t] = selectTargets(unit, 'highest_matk', 1);
+      if (t) {
+        spawnFx('orb', unit, t, '#a855f7');
+        const maxSteal = sk.tpSteal || 260;
+        const stolen = Math.min(t.tp, maxSteal);
+        t.tp = Math.max(0, t.tp - stolen);
+        spawnPopup(t, `-${stolen} TP`, 'text-purple-300 font-extrabold text-xs', -20);
+        const selfRecover = Math.round(stolen * 0.5);
+        const actualRecovered = selfRecover > 0 ? gainTp(unit, selfRecover, true) : 0;
+        addLog('skill', `${unit.name} stole ${stolen} TP from ${t.name} with ${skillLabel} (+${actualRecovered} TP self)!`);
+      }
+      break;
+    }
+    case 'phys_second_nearest_pull': {
+      const [t] = selectTargets(unit, 'second_nearest', 1);
+      if (t) {
+        spawnFx('slash', unit, t, '#fb7185');
+        const pullAmt = sk.pullPos || 180;
+        const d = dealDamage(unit, t, sk.mult || 1.50, 'physical', {
+          baseHitTp: sk.baseHitTp || 112,
+          label: skillLabel,
+        });
+        let moved = 0;
+        if (t.alive) {
+          moved = displaceUnit(unit, t, -pullAmt, {
+            knockbackPx: 42,
+            ccDuration: 0.45,
+            sourceName: unit.name,
+            silentPopup: true,
+          });
+          spawnPopup(t, 'PULL!', 'text-rose-300 font-extrabold text-xs', -18);
+        }
+        addLog('skill', `${unit.name} snared ${t.name} with ${skillLabel} (${d} DMG, Pull ${moved || pullAmt})!`);
+      }
+      break;
+    }
+    case 'phys_aoe_700_slow': {
+      const targets = selectTargets(unit, 'frontline_range', 99, sk.range || 700);
+      const slowPct = sk.slowPct || 0.10;
+      const slowSec = sk.slowSec || 10;
+      for (const t of targets) {
+        spawnFx('slash', unit, t, '#fb7185');
+        dealDamage(unit, t, sk.mult || 1.30, 'physical', {
+          baseHitTp: sk.baseHitTp || 105,
+          label: skillLabel,
+        });
+        if (t.alive) {
+          t.debuffs.push({ type: 'slow', val: slowPct, remaining: slowSec });
+          spawnPopup(t, '-SPD', 'text-amber-300 font-bold text-xs', -18);
+        }
+      }
+      addLog('skill', `${unit.name} spun ${skillLabel} across ${targets.length} enemy(s) (${sk.range || 700} range, -${Math.round(slowPct * 100)}% SPD for ${slowSec}s)!`);
       break;
     }
     case 'flank_shred_strike': {
@@ -972,6 +1441,27 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
       }
       break;
     }
+    case 'mag_front_nuke': {
+      const [t] = selectTargets(unit, 'nearest', 1);
+      if (t) {
+        spawnFx('beam', unit, t, '#38bdf8');
+        const d = dealDamage(unit, t, sk.mult || 1.80, 'magical', {
+          baseHitTp: sk.baseHitTp || 112,
+          label: skillLabel,
+        });
+        addLog('skill', `${unit.name} pierced ${t.name} with ${skillLabel} for ${d} MATK DMG!`);
+      }
+      break;
+    }
+    case 'buff_self_matk': {
+      const matkPct = sk.matkPct || 0.38;
+      const dur = sk.durationSec || 9;
+      spawnFx('aoe', unit, unit, '#38bdf8');
+      unit.buffs.push({ type: 'matkUp', val: matkPct, remaining: dur });
+      spawnPopup(unit, `+${Math.round(matkPct * 100)}% MATK!`, 'text-sky-300 font-bold text-xs', -20);
+      addLog('skill', `${unit.name} activated ${skillLabel} (+${Math.round(matkPct * 100)}% MATK for ${dur}s)!`);
+      break;
+    }
     case 'heal_lowest_shield': {
       const [ally] = selectAllies(unit, 'lowest_hp_pct', 1);
       if (ally) {
@@ -991,6 +1481,20 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
         spawnPopup(ally, 'HASTE!', 'text-purple-300 font-bold text-xs', -8);
         addLog('skill', `${unit.name} cast ${skillLabel} on ${ally.name} (+Haste & +TP).`);
       }
+      break;
+    }
+    case 'buff_all_allies_atk_haste': {
+      const allies = selectAllies(unit, 'all_allies');
+      const atkPct = sk.atkPct || 0.22;
+      const hastePct = sk.hastePct || 0.50;
+      const dur = sk.durationSec || 20;
+      for (const a of allies) {
+        spawnFx('orb', unit, a, '#facc15');
+        a.buffs.push({ type: 'atkUp', val: atkPct, remaining: dur });
+        a.buffs.push({ type: 'haste', val: hastePct, remaining: dur });
+        spawnPopup(a, '+ATK & +SPD!', 'text-amber-300 font-bold text-xs', -12);
+      }
+      addLog('skill', `${unit.name} rallied all allies with ${skillLabel} (+${Math.round(atkPct * 100)}% PATK/MATK & +${Math.round(hastePct * 100)}% SPD for ${dur}s)!`);
       break;
     }
     case 'mag_slow_enemy': {
@@ -1074,14 +1578,17 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
       spawnFx('aoe', unit, targets[0] || unit, '#f59e0b');
       targets.forEach((t, idx) => {
         dealDamage(unit, t, 2.25, 'physical', {
-          knockbackPx: idx === 0 ? 22 : 10,
+          knockbackPos: idx === 0 ? 75 : 40,
+          knockbackPx: idx === 0 ? 30 : 16,
+          knockbackDuration: 0.4,
+          silentDisplacementPopup: true,
           ccType: idx === 0 ? 'stun' : null,
           ccDuration: 1.1,
         });
       });
       grantShield(unit, unit, unit.maxHp * 0.28);
       unit.buffs.push({ type: 'taunt', val: 1, remaining: 4.5 });
-      addLog('ub', `★ ${unit.name} unleashed ${skillLabel} (AOE DMG, Stun, Barrier & Taunt)!`);
+      addLog('ub', `★ ${unit.name} unleashed ${skillLabel} (AOE DMG, Knockback, Stun, Barrier & Taunt)!`);
       break;
     }
     case 'ub_crimson_eclipse': {
@@ -1097,6 +1604,20 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
       }
       break;
     }
+    case 'ub_nozomi_idol_stage': {
+      const allies = selectAllies(unit, 'all_allies');
+      for (const a of allies) {
+        spawnFx('orb', unit, a, '#facc15');
+        a.buffs.push({ type: 'patkUp', val: 0.28, remaining: 10 });
+      }
+      const tauntDur = unit.ub?.tauntDuration || 10;
+      const tauntRange = unit.ub?.tauntRange || 250;
+      unit.buffs.push({ type: 'defUp', val: 0.45, remaining: tauntDur });
+      unit.buffs.push({ type: 'taunt', val: 1, remaining: tauntDur, range: tauntRange });
+      spawnPopup(unit, 'TAUNT & +DEF!', 'text-amber-300 font-extrabold text-xs', -22);
+      addLog('ub', `★ ${unit.name} activated ${skillLabel} (+PATK to allies, +PDEF/MDEF & ${tauntRange}-range Taunt for ${tauntDur}s)!`);
+      break;
+    }
     case 'ub_phantom_severance': {
       const [t] = selectTargets(unit, 'lowest_hp', 1);
       if (t) {
@@ -1110,6 +1631,21 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
           t.debuffs.push({ type: 'defDown', val: 0.30, remaining: 6 });
         }
         addLog('ub', `★ ${unit.name} struck ${t.name} with ${skillLabel} for ${d} DMG (-30% DEF & Silence)!`);
+      }
+      break;
+    }
+    case 'ub_tamaki_cat_strike': {
+      const [t] = selectTargets(unit, 'highest_matk', 1);
+      if (t) {
+        spawnFx('beam', unit, t, '#c084fc');
+        const d = dealDamage(unit, t, 3.05, 'physical', {
+          bonusCrit: 0.20,
+        });
+        if (t.alive) {
+          t.debuffs.push({ type: 'matkDown', val: unit.ub?.matkShredPct || 0.28, remaining: 6 });
+          spawnPopup(t, '-MATK', 'text-purple-300 font-bold text-xs', -22);
+        }
+        addLog('ub', `★ ${unit.name} unleashed ${skillLabel} on ${t.name} for ${d} DMG & -MATK!`);
       }
       break;
     }
@@ -1158,6 +1694,59 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
         }
       });
       addLog('ub', `★ ${unit.name} dropped ${skillLabel} across ALL enemies!`);
+      break;
+    }
+    case 'ub_kyouka_cosmo_flash': {
+      const [t] = selectTargets(unit, 'nearest', 1);
+      if (t) {
+        spawnFx('beam', unit, t, '#38bdf8');
+        const d = dealDamage(unit, t, 3.25, 'magical', {
+          bonusCrit: 0.15,
+          critMultOverride: unit.ub?.critMultOverride || 4.0,
+        });
+        addLog('ub', `★ ${unit.name} unleashed ${skillLabel} on ${t.name} for ${d} MATK DMG (x4 Crit Multiplier)!`);
+      }
+      break;
+    }
+    case 'ub_tsumugi_capture_web': {
+      const maxRange = unit.ub?.range || 900;
+      const shiftAmt = unit.ub?.shiftRange || 300;
+      const stunSec = unit.ub?.stunSec || 2.5;
+      const targets = selectTargets(unit, 'frontline_range', 99, maxRange);
+
+      for (const t of targets) {
+        spawnFx('slash', unit, t, '#fb7185');
+        dealDamage(unit, t, 2.15, 'physical', {
+          ccType: 'stun',
+          ccDuration: stunSec,
+        });
+      }
+
+      const livingInRange = targets.filter((t) => t.alive && typeof t.posX === 'number');
+      if (livingInRange.length > 0) {
+        const nearest = livingInRange[0];
+        const farthest = livingInRange[livingInRange.length - 1];
+
+        displaceUnit(unit, nearest, shiftAmt, {
+          knockbackPx: 55,
+          ccDuration: 0,
+          sourceName: unit.name,
+          silentPopup: true,
+        });
+        spawnPopup(nearest, `PUSH ${shiftAmt}!`, 'text-amber-300 font-extrabold text-xs', -24);
+
+        if (farthest.uid !== nearest.uid) {
+          displaceUnit(unit, farthest, -shiftAmt, {
+            knockbackPx: 55,
+            ccDuration: 0,
+            sourceName: unit.name,
+            silentPopup: true,
+          });
+          spawnPopup(farthest, `PULL ${shiftAmt}!`, 'text-rose-300 font-extrabold text-xs', -24);
+        }
+      }
+
+      addLog('ub', `★ ${unit.name} unleashed ${skillLabel} (${targets.length} enemy(s) in ${maxRange} range, ${stunSec}s Stun, Pull farthest ${shiftAmt} / Push nearest ${shiftAmt})!`);
       break;
     }
     case 'ub_tempest_piercer': {
@@ -1320,7 +1909,7 @@ triggerUnionBurst(u);
 }
 
 for (const u of battle.units) {
-if (!u.alive) continue;
+if (!u.alive || u.enteringBattle) continue;
 updateBuffsAndDebuffs(u, dt);
 if (!u.alive) continue;
 

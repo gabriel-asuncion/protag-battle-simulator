@@ -144,10 +144,12 @@ function renderPageViews() {
         } else if (state.playerSelection.length < 4) {
           state.playerSelection.push(id);
         }
-        // Auto-arrange: left = furthest back (highest rangeCenter), right = closest to center
+        // Auto-arrange: left = furthest back (highest rangeCenter/distance), right = closest to center
         state.playerSelection.sort((a, b) => {
-          const za = POSITION_ZONES.find((p) => p.id === getTemplateById(a).positionZone)?.rangeCenter ?? 465;
-          const zb = POSITION_ZONES.find((p) => p.id === getTemplateById(b).positionZone)?.rangeCenter ?? 465;
+          const ta = getTemplateById(a);
+          const tb = getTemplateById(b);
+          const za = ta.distance ?? POSITION_ZONES.find((p) => p.id === ta.positionZone)?.rangeCenter ?? 465;
+          const zb = tb.distance ?? POSITION_ZONES.find((p) => p.id === tb.positionZone)?.rangeCenter ?? 465;
           return zb - za;
         });
         renderTeamBuilders();
@@ -278,6 +280,122 @@ function renderArena() {
 
   const unitsLayer = document.getElementById('arena-units-layer');
   if (!unitsLayer) return;
+
+  // Ground AoE warning telegraphs (40% opacity red circle on the target floor during windup)
+  let telegraphLayer = document.getElementById('aoe-telegraph-layer');
+  if (!telegraphLayer && unitsLayer.parentElement) {
+    telegraphLayer = document.createElement('div');
+    telegraphLayer.id = 'aoe-telegraph-layer';
+    telegraphLayer.className = 'absolute inset-0 pointer-events-none z-[5] overflow-hidden';
+    unitsLayer.parentElement.insertBefore(telegraphLayer, unitsLayer);
+  }
+
+  if (telegraphLayer) {
+    const AOE_ALL_ACTIONS = new Set(['ub_cataclysmic_meteor', 'ub_hourglass_paradox']);
+    const AOE_NEAR_ACTIONS = new Set(['mag_aoe_burn', 'ub_aegis_cataclysm', 'ub_dawnstar_judgment']);
+    const AOE_RANGE_ACTIONS = new Set([
+      'phys_aoe_750_kill_tp',
+      'ub_ninon_frontline_aoe',
+      'phys_front_aoe_stun',
+      'ub_monica_frontline_aoe',
+      'phys_aoe_700_slow',
+      'ub_tsumugi_capture_web',
+    ]);
+    const AOE_FRONT_50_ACTIONS = new Set(['ub_llima_frontline_aoe']);
+
+    const telegraphs = [];
+    for (const caster of battle.units) {
+      if (!caster.alive || caster.enteringBattle || caster.actionPhase !== 'WINDUP' || !caster.queuedAction) continue;
+
+      const qa = caster.queuedAction;
+      let actionCode = qa.actionCode || qa.action || '';
+      if (!actionCode && qa.kind === 'ub' && caster.ub) {
+        actionCode = caster.ub.action || '';
+      }
+      if (!actionCode && caster.autoSkills) {
+        const matched = Object.values(caster.autoSkills).find((s) => s && s.name === qa.label);
+        if (matched) actionCode = matched.action || '';
+      }
+
+      const isAllAoe = AOE_ALL_ACTIONS.has(actionCode);
+      const isNearAoe = AOE_NEAR_ACTIONS.has(actionCode);
+      const isRangeAoe = AOE_RANGE_ACTIONS.has(actionCode);
+      const isFront50Aoe = AOE_FRONT_50_ACTIONS.has(actionCode);
+      if (!isAllAoe && !isNearAoe && !isRangeAoe && !isFront50Aoe) continue;
+
+      const foes = battle.units
+        .filter((t) => t.alive && !t.enteringBattle && t.side !== caster.side)
+        .sort((a, b) => Math.abs(a.visualX - caster.visualX) - Math.abs(b.visualX - caster.visualX));
+      if (!foes.length) continue;
+
+      let affected = foes;
+      if (isFront50Aoe) {
+        const frontX = foes[0].posX ?? 0;
+        const maxRange = qa.skillDef?.aoeRange || 50;
+        const inFront = foes.filter((t) => Math.abs((t.posX ?? 0) - frontX) <= maxRange);
+        affected = inFront.length > 0 ? inFront : foes.slice(0, 1);
+      } else if (isRangeAoe) {
+        const maxRange = qa.skillDef?.range || 750;
+        const inRange = foes.filter(
+          (t) => Math.abs((t.posX ?? 0) - (caster.posX ?? 0)) <= maxRange
+        );
+        affected = inRange.length > 0 ? inRange : foes.slice(0, 1);
+      } else if (!isAllAoe) {
+        affected = foes.slice(0, 2);
+      }
+      const xs = affected.map((t) => t.visualX);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const centerX = (minX + maxX) / 2;
+      const widthPct = Math.max(18, maxX - minX + 14);
+      const progress =
+        caster.phaseDuration > 0
+          ? Math.max(0.08, Math.min(1, caster.phaseTimer / caster.phaseDuration))
+          : 0.5;
+      const label = qa.label || (qa.kind === 'ub' ? caster.ub?.name : 'AoE') || 'AoE';
+
+      telegraphs.push({
+        centerX,
+        widthPct,
+        progress,
+        label,
+        isUb: qa.kind === 'ub',
+      });
+    }
+
+    telegraphLayer.innerHTML = telegraphs
+      .map(
+        (tg) => `
+        <div
+          class="absolute -translate-x-1/2 -translate-y-1/2 rounded-full flex items-center justify-center"
+          style="
+            left: ${tg.centerX.toFixed(2)}%;
+            top: 68%;
+            width: ${tg.widthPct.toFixed(2)}%;
+            height: ${tg.isUb ? '86px' : '68px'};
+            background: rgba(239, 68, 68, 0.40);
+            border: 2px solid rgba(252, 165, 165, 0.92);
+            box-shadow: 0 0 22px rgba(239, 68, 68, 0.45), inset 0 0 18px rgba(185, 28, 28, 0.45);
+          "
+        >
+          <div
+            class="w-full h-full rounded-full"
+            style="
+              background: rgba(239, 68, 68, 0.35);
+              border: 1.5px solid rgba(254, 202, 202, 0.85);
+              transform: scale(${tg.progress.toFixed(3)});
+            "
+          ></div>
+          <span
+            class="absolute -bottom-5 px-2 py-0.5 rounded-full bg-red-950/90 border border-red-400/70 text-[10px] font-extrabold text-red-100 whitespace-nowrap shadow"
+          >
+            ⚠ ${tg.label}
+          </span>
+        </div>
+      `
+      )
+      .join('');
+  }
 
   const existingMap = new Map();
   unitsLayer.querySelectorAll('[data-uid]').forEach((el) => {
@@ -521,8 +639,10 @@ function renderTeamBuilders() {
 
   // Ensure player squad is always sorted Back (left) -> Front (right) with no duplicates
   state.playerSelection = [...new Set(state.playerSelection)].slice(0, 4).sort((a, b) => {
-    const za = POSITION_ZONES.find((p) => p.id === getTemplateById(a).positionZone)?.rangeCenter ?? 465;
-    const zb = POSITION_ZONES.find((p) => p.id === getTemplateById(b).positionZone)?.rangeCenter ?? 465;
+    const ta = getTemplateById(a);
+    const tb = getTemplateById(b);
+    const za = ta.distance ?? POSITION_ZONES.find((p) => p.id === ta.positionZone)?.rangeCenter ?? 465;
+    const zb = tb.distance ?? POSITION_ZONES.find((p) => p.id === tb.positionZone)?.rangeCenter ?? 465;
     return zb - za;
   });
 
@@ -582,8 +702,10 @@ function renderTeamBuilders() {
     if (dummySelect) dummySelect.classList.add('hidden');
     if (enemyLabel) enemyLabel.textContent = "Opponent's Party";
     state.enemySelection = [...new Set(state.enemySelection)].slice(0, 4).sort((a, b) => {
-      const za = POSITION_ZONES.find((p) => p.id === getTemplateById(a).positionZone)?.rangeCenter ?? 465;
-      const zb = POSITION_ZONES.find((p) => p.id === getTemplateById(b).positionZone)?.rangeCenter ?? 465;
+      const ta = getTemplateById(a);
+      const tb = getTemplateById(b);
+      const za = ta.distance ?? POSITION_ZONES.find((p) => p.id === ta.positionZone)?.rangeCenter ?? 465;
+      const zb = tb.distance ?? POSITION_ZONES.find((p) => p.id === tb.positionZone)?.rangeCenter ?? 465;
       return za - zb;
     });
     if (enemyPowerEl) enemyPowerEl.textContent = String(computePartyPower(state.enemySelection));

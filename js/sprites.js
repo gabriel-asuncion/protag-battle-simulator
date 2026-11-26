@@ -1,10 +1,59 @@
 // =========================================================================
 // CHROMA-KEY SPRITE SHEET SLICER + BESPOKE SVG FALLBACK RENDERER
 // =========================================================================
-const SPRITE_SHEET_SOURCES = [
-  'assets/chibi_parts_grid.png',
-  'Chibi RPG Character Parts Grid.png',
-  './assets/chibi_parts_grid.png',
+// 4 rows x 2 cols chibi parts grids (Wave 1 & Wave 2)
+const CHIBI_GRID_COLS = 2;
+const CHIBI_GRID_ROWS = 4;
+
+const CHIBI_SPRITE_SHEETS = [
+  {
+    sources: [
+      'assets/chibi_parts_grid1.png',
+      './assets/chibi_parts_grid1.png',
+    ],
+    cellMap: {
+      bram_ironclad: { row: 0, col: 0 },
+      kaelen_ashblade: { row: 0, col: 1 },
+      vespera_nightstep: { row: 1, col: 0 },
+      sylas_sunweaver: { row: 1, col: 1 },
+      mirella_hexthread: { row: 2, col: 0 },
+      orin_pyrecaster: { row: 2, col: 1 },
+      lyra_windpiercer: { row: 3, col: 0 },
+      talia_dewsong: { row: 3, col: 1 },
+    },
+  },
+  {
+    sources: [
+      'assets/chibi_parts_grid2.png',
+      './assets/chibi_parts_grid2.png',
+    ],
+    cellMap: {
+      garrick_stoneguard: { row: 0, col: 0 },
+      seraphina_dawnblade: { row: 0, col: 1 },
+      zephyr_shadowstep: { row: 1, col: 0 },
+      aurelia_starcaller: { row: 1, col: 1 },
+      corvus_voidweaver: { row: 2, col: 0 },
+      ignis_emberheart: { row: 2, col: 1 },
+      sylvia_frostbow: { row: 3, col: 0 },
+      elara_moonbloom: { row: 3, col: 1 },
+    },
+  },
+  {
+    sources: [
+      'assets/chibi_parts_grid3.png',
+      './assets/chibi_parts_grid3.png',
+    ],
+    cellMap: {
+      yukari: { row: 0, col: 0 },
+      ninon: { row: 0, col: 1 },
+      llima: { row: 1, col: 0 },
+      nozomi: { row: 1, col: 1 },
+      tamaki: { row: 2, col: 0 },
+      monica: { row: 2, col: 1 },
+      kyouka: { row: 3, col: 0 },
+      tsumugi: { row: 3, col: 1 },
+    },
+  },
 ];
 
 const ACTION_FX_SHEET_SOURCES = [
@@ -12,21 +61,6 @@ const ACTION_FX_SHEET_SOURCES = [
   'image_d38c4d.jpg',
   './image_d38c4d.jpg',
 ];
-
-// 4 rows x 2 cols chibi parts grid
-const CHIBI_GRID_COLS = 2;
-const CHIBI_GRID_ROWS = 4;
-
-const CHIBI_CELL_MAP = {
-  bram_ironclad: { row: 0, col: 0 },
-  kaelen_ashblade: { row: 0, col: 1 },
-  vespera_nightstep: { row: 1, col: 0 },
-  sylas_sunweaver: { row: 1, col: 1 },
-  mirella_hexthread: { row: 2, col: 0 },
-  orin_pyrecaster: { row: 2, col: 1 },
-  lyra_windpiercer: { row: 3, col: 0 },
-  talia_dewsong: { row: 3, col: 1 },
-};
 
 // 8 rows x 6 cols mapping to the action FX sprite sheet
 const ACTION_FX_CELL_MAP = {
@@ -345,10 +379,9 @@ function getActionFxSpriteSrc(fxKey) {
   return spriteSheetCache.fxCutouts[fxKey] || null;
 }
 
-function loadChibiSpriteSheet(sourceIndex = 0) {
-  if (sourceIndex >= SPRITE_SHEET_SOURCES.length) {
-    spriteSheetCache.status = 'failed';
-    notifySpriteListeners();
+function loadSingleChibiSheet(sheetConfig, sourceIndex = 0, onDone = null) {
+  if (sourceIndex >= sheetConfig.sources.length) {
+    if (onDone) onDone(false);
     return;
   }
 
@@ -358,26 +391,44 @@ function loadChibiSpriteSheet(sourceIndex = 0) {
     try {
       const keyed = keyOutGreenScreenCanvas(img);
       if (!keyed) {
-        loadChibiSpriteSheet(sourceIndex + 1);
+        loadSingleChibiSheet(sheetConfig, sourceIndex + 1, onDone);
         return;
       }
-      for (const [tplId, cell] of Object.entries(CHIBI_CELL_MAP)) {
+      for (const [tplId, cell] of Object.entries(sheetConfig.cellMap)) {
         spriteSheetCache.cutouts[tplId] = extractMainChibiCutout(keyed, cell.row, cell.col);
         spriteSheetCache.headCutouts[tplId] = extractHeadChibiCutout(keyed, cell.row, cell.col);
       }
-      spriteSheetCache.status = 'ready';
-      notifySpriteListeners();
-      if (typeof renderAllUI === 'function') {
-        renderAllUI();
-      }
+      if (onDone) onDone(true);
     } catch (_) {
-      loadChibiSpriteSheet(sourceIndex + 1);
+      loadSingleChibiSheet(sheetConfig, sourceIndex + 1, onDone);
     }
   };
   img.onerror = () => {
-    loadChibiSpriteSheet(sourceIndex + 1);
+    loadSingleChibiSheet(sheetConfig, sourceIndex + 1, onDone);
   };
-  img.src = SPRITE_SHEET_SOURCES[sourceIndex];
+  img.src = sheetConfig.sources[sourceIndex];
+}
+
+function loadChibiSpriteSheet() {
+  let remaining = CHIBI_SPRITE_SHEETS.length;
+  let loadedCount = 0;
+
+  CHIBI_SPRITE_SHEETS.forEach((sheetConfig) => {
+    loadSingleChibiSheet(sheetConfig, 0, (ok) => {
+      if (ok) loadedCount++;
+      remaining--;
+      if (ok && typeof renderAllUI === 'function') {
+        renderAllUI();
+      }
+      if (remaining === 0) {
+        spriteSheetCache.status = loadedCount > 0 ? 'ready' : 'failed';
+        notifySpriteListeners();
+        if (typeof renderAllUI === 'function') {
+          renderAllUI();
+        }
+      }
+    });
+  });
 }
 
 function renderFallbackChibiSVG(unit, isVictory = false) {
@@ -393,6 +444,14 @@ function renderFallbackChibiSVG(unit, isVictory = false) {
     orin_pyrecaster: { primary: '#7c2d12', secondary: '#fed7aa', accent: '#fb923c', trim: '#ef4444' },
     lyra_windpiercer: { primary: '#065f46', secondary: '#a7f3d0', accent: '#34d399', trim: '#facc15' },
     talia_dewsong: { primary: '#0f766e', secondary: '#99f6e4', accent: '#2dd4bf', trim: '#fef08a' },
+    yukari: { primary: '#0284c7', secondary: '#bae6fd', accent: '#38bdf8', trim: '#facc15' },
+    ninon: { primary: '#b91c1c', secondary: '#fecaca', accent: '#f97316', trim: '#facc15' },
+    llima: { primary: '#ec4899', secondary: '#fce7f3', accent: '#f472b6', trim: '#fde047' },
+    nozomi: { primary: '#db2777', secondary: '#fbcfe8', accent: '#facc15', trim: '#38bdf8' },
+    tamaki: { primary: '#7e22ce', secondary: '#f3e8ff', accent: '#f59e0b', trim: '#38bdf8' },
+    monica: { primary: '#1d4ed8', secondary: '#dbeafe', accent: '#facc15', trim: '#f43f5e' },
+    kyouka: { primary: '#0369a1', secondary: '#e0f2fe', accent: '#38bdf8', trim: '#c084fc' },
+    tsumugi: { primary: '#be123c', secondary: '#ffe4e6', accent: '#fb7185', trim: '#fde047' },
     training_dummy: { primary: '#78350f', secondary: '#fde68a', accent: '#f59e0b', trim: '#94a3b8' },
   };
   const pal = palettes[id] || palettes.bram_ironclad;

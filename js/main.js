@@ -127,10 +127,16 @@ document.getElementById('auto-ub-btn')?.addEventListener('click', () => {
 
 document.getElementById('reset-battle-btn')?.addEventListener('click', () => {
   document.getElementById('hud-menu-modal')?.classList.add('hidden');
+  if (state.mode === '4v4' && typeof applySmartEnemyStrategy === 'function') {
+    applySmartEnemyStrategy();
+  }
   initBattle({ autoStart: true });
 });
 
 document.getElementById('overlay-restart-btn')?.addEventListener('click', () => {
+  if (state.mode === '4v4' && typeof applySmartEnemyStrategy === 'function') {
+    applySmartEnemyStrategy();
+  }
   initBattle({ autoStart: true });
 });
 
@@ -198,7 +204,11 @@ function mainLoop(now) {
   requestAnimationFrame(mainLoop);
 }
 
-state.page = 'battle';
+state.page = 'lobby';
+if (typeof applySmartEnemyStrategy === 'function') {
+  applySmartEnemyStrategy();
+}
 renderTeamBuilders();
-initBattle({ autoStart: true });
+initBattle({ autoStart: false });
+renderAllUI();
 requestAnimationFrame(mainLoop);
