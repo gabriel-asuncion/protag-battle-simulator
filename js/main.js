@@ -149,25 +149,42 @@ document.getElementById('clear-log-btn')?.addEventListener('click', () => {
   renderBattleLog();
 });
 
-document.getElementById('preset-balanced-btn')?.addEventListener('click', () => {
-  state.playerSelection = ['bram_ironclad', 'vespera_nightstep', 'mirella_hexthread', 'talia_dewsong'];
-  state.enemySelection = ['kaelen_ashblade', 'sylas_sunweaver', 'orin_pyrecaster', 'lyra_windpiercer'];
-  renderTeamBuilders();
-  renderPageViews();
-});
-
-document.getElementById('preset-rush-btn')?.addEventListener('click', () => {
-  state.playerSelection = ['bram_ironclad', 'kaelen_ashblade', 'vespera_nightstep', 'sylas_sunweaver'];
-  state.enemySelection = ['bram_ironclad', 'mirella_hexthread', 'orin_pyrecaster', 'talia_dewsong'];
+document.getElementById('draft-strategy-pick-btn')?.addEventListener('click', () => {
+  const strat = document.getElementById('draft-strategy-select')?.value || 'balanced';
+  state.playerSelection = buildStrategyTeam(strat);
+  if (state.mode === '4v4' && typeof applySmartEnemyStrategy === 'function') {
+    applySmartEnemyStrategy();
+  }
   renderTeamBuilders();
   renderPageViews();
 });
 
 document.querySelectorAll('.open-codex-trigger').forEach((btn) => {
   btn.addEventListener('click', () => {
-    renderCodexModal();
-    document.getElementById('codex-modal')?.classList.remove('hidden');
+    openCharacterViewer();
   });
+});
+
+document.getElementById('close-character-viewer-btn')?.addEventListener('click', () => {
+  if (characterViewerState.mode === 'detail') {
+    characterViewerState.mode = 'grid';
+    renderCharacterViewer();
+  } else {
+    closeCharacterViewer();
+  }
+});
+
+document.getElementById('viewer-grid-btn')?.addEventListener('click', () => {
+  characterViewerState.mode = 'grid';
+  renderCharacterViewer();
+});
+
+document.getElementById('close-skill-preview-btn')?.addEventListener('click', () => {
+  closeSkillPreview();
+});
+
+document.getElementById('replay-skill-preview-btn')?.addEventListener('click', () => {
+  playSkillPreviewAnimation();
 });
 
 document.getElementById('close-codex-btn')?.addEventListener('click', () => {
@@ -175,6 +192,27 @@ document.getElementById('close-codex-btn')?.addEventListener('click', () => {
 });
 
 window.addEventListener('keydown', (e) => {
+  const previewModal = document.getElementById('skill-preview-modal');
+  if (previewModal && !previewModal.classList.contains('hidden')) {
+    if (e.key === 'Escape') closeSkillPreview();
+    return;
+  }
+  const viewerModal = document.getElementById('character-viewer-modal');
+  if (viewerModal && !viewerModal.classList.contains('hidden')) {
+    if (e.key === 'Escape') {
+      if (characterViewerState.mode === 'detail') {
+        characterViewerState.mode = 'grid';
+        renderCharacterViewer();
+      } else {
+        closeCharacterViewer();
+      }
+    } else if (characterViewerState.mode === 'detail' && e.key === 'ArrowLeft') {
+      stepCharacterViewer(-1);
+    } else if (characterViewerState.mode === 'detail' && e.key === 'ArrowRight') {
+      stepCharacterViewer(1);
+    }
+    return;
+  }
   if (state.page !== 'battle') return;
   if (['1', '2', '3', '4'].includes(e.key)) {
     const idx = Number(e.key) - 1;
@@ -199,6 +237,10 @@ function mainLoop(now) {
     updateBattle(rawDt);
     renderArena();
     renderUbDeck();
+  }
+
+  if (typeof updatePreviewAndViewerRigs === 'function') {
+    updatePreviewAndViewerRigs(rawDt);
   }
 
   requestAnimationFrame(mainLoop);

@@ -52,15 +52,33 @@ function createCombatUnit(templateId, side, slotIndex, customZoneOverride = null
     shield: 0,
     magicShield: 0,
     physicalShield: 0,
-    physicalShield: 0,
-    patk: tpl.stats.patk,
-    matk: tpl.stats.matk,
-    pdef: tpl.stats.pdef,
-    mdef: tpl.stats.mdef,
-    actionSpeed: tpl.stats.actionSpeed,
-    critRate: tpl.stats.critRate,
-    critMult: tpl.stats.critMult,
-    tpGainRate: tpl.stats.tpGainRate,
+    patk: tpl.stats.patk || 0,
+    matk: tpl.stats.matk || 0,
+    pcrit: tpl.stats.pcrit || 0,
+    mcrit: tpl.stats.mcrit || 0,
+    pdef: tpl.stats.pdef || 0,
+    mdef: tpl.stats.mdef || 0,
+    ppen: tpl.stats.ppen || 0,
+    mpen: tpl.stats.mpen || 0,
+    actionSpeed: tpl.stats.actionSpeed || 1.0,
+    dodge: tpl.stats.dodge || 0,
+    accuracy: tpl.stats.accuracy || 0,
+    hpRecoveryRate: tpl.stats.hpRecoveryRate || 0,
+    tpRecoveryRate: tpl.stats.tpRecoveryRate || 0,
+    waveHpRecovery: tpl.stats.waveHpRecovery || 0,
+    waveTpRecovery: tpl.stats.waveTpRecovery || 0,
+    hpReduceRate: tpl.stats.hpReduceRate || 0,
+    tpReduceRate: tpl.stats.tpReduceRate || 0,
+    moveSpeed: tpl.stats.moveSpeed || 240,
+    critRate:
+      typeof tpl.stats.critRate === 'number'
+        ? tpl.stats.critRate
+        : Math.min(0.95, ((tpl.damageType === 'magical' ? tpl.stats.mcrit : tpl.stats.pcrit) || 0) / 2000),
+    critMult: tpl.stats.critMult || 2.0,
+    tpGainRate:
+      typeof tpl.stats.tpGainRate === 'number'
+        ? tpl.stats.tpGainRate
+        : 1 + (tpl.stats.tpRecoveryRate || 0) / 100,
     damageType: tpl.damageType,
 
     tp: 0,
@@ -74,8 +92,10 @@ function createCombatUnit(templateId, side, slotIndex, customZoneOverride = null
     actionPhase: 'IDLE',
     phaseTimer: 0,
     phaseDuration: 0,
-    queuedAction: null,
-    speechBubble: null,
+    activeAnimKey: 'idle',
+    animProgress: 0,
+    rigIdleTime: Math.random() * Math.PI * 2,
+    queuedAction: null,    speechBubble: null,
     ccInterruptCount: 0,
 
     ub: tpl.ub,
@@ -394,6 +414,8 @@ function interruptActiveWindupIfAny(unit, ccReason) {
     unit.actionPhase = 'IDLE';
     unit.phaseTimer = 0;
     unit.phaseDuration = 0;
+    unit.activeAnimKey = 'idle';
+    unit.animProgress = 0;
     unit.actionGauge = 0;
     unit.ccInterruptCount = (unit.ccInterruptCount || 0) + 1;
     if (unit.animState === 'windup') {
@@ -439,13 +461,18 @@ function getEffectiveStats(unit) {
     if (d.type === 'slow') hasteMult = Math.max(0.35, hasteMult - d.val);
   }
 
+  const baseHealMult = 1 + (unit.hpRecoveryRate || 0) / 100;
   return {
     patk: unit.patk * patkMult,
     matk: unit.matk * matkMult,
     pdef: unit.pdef * pdefMult,
     mdef: unit.mdef * mdefMult,
+    ppen: unit.ppen || 0,
+    mpen: unit.mpen || 0,
+    dodge: unit.dodge || 0,
+    accuracy: unit.accuracy || 0,
     hasteMult,
-    healMult,
+    healMult: healMult * baseHealMult,
     critRate: Math.min(0.95, unit.critRate + bonusCrit),
   };
 }
@@ -534,19 +561,22 @@ function updateFrontShiftAndVisualPositions(dt, isEntrance = false) {
     }
 
     const enemies = getLivingUnits(u.side === 'player' ? 'enemy' : 'player').filter((e) => !e.enteringBattle);
-    if (battle.running && enemies.length > 0 && u.actionPhase === 'IDLE' && !isUnitIncapacitated(u)) {
+    if (battle.running && enemies.length > 0 && !isUnitIncapacitated(u)) {
       const nearestEnemy = [...enemies].sort(
         (a, b) => Math.abs((a.posX ?? 0) - u.posX) - Math.abs((b.posX ?? 0) - u.posX)
       )[0];
-      const dist = Math.abs((nearestEnemy.posX ?? 0) - u.posX);
-      const atkRange = getUnitAttackRange(u);
-      if (dist > atkRange) {
-        const rawDiff = (nearestEnemy.posX ?? 0) - u.posX;
-        const dir = rawDiff !== 0 ? Math.sign(rawDiff) : u.side === 'player' ? 1 : -1;
-        const moveSpeed = 240 * u.actionSpeed;
-        u.posX += dir * Math.min(dist - atkRange + 4, moveSpeed * dt);
-        u.posX = Math.max(-920, Math.min(920, u.posX));
-        isMoving = true;
+      const rawDiff = (nearestEnemy.posX ?? 0) - u.posX;
+      const dir = rawDiff !== 0 ? Math.sign(rawDiff) : u.side === 'player' ? 1 : -1;
+      if (u.actionPhase === 'IDLE') {
+        u.facingDir = dir;
+        const dist = Math.abs(rawDiff);
+        const atkRange = getUnitAttackRange(u);
+        if (dist > atkRange) {
+          const moveSpeed = u.moveSpeed || 240;
+          u.posX += dir * Math.min(dist - atkRange + 6, moveSpeed * dt);
+          u.posX = Math.max(-920, Math.min(920, u.posX));
+          isMoving = true;
+        }
       }
     }
 
@@ -693,10 +723,11 @@ function gainTp(unit, rawAmount, showSkillPopup = false) {
 function spawnPopup(unit, text, className = 'text-white font-bold text-xs', offsetY = 0) {
   const safeX = Number.isFinite(unit?.visualX) ? Math.max(12, Math.min(88, unit.visualX)) : 50;
   const yStagger = ((unit?.slotIndex ?? 1.5) - 1.5) * 18;
+  const finalClass = battle.activeUbPopupScale ? `${className} ub-heroic-popup` : className;
   battle.popups.push({
     id: Math.random().toString(36).slice(2, 8),
     text,
-    className,
+    className: finalClass,
     xPct: safeX,
     baseTopPct: 56 + yStagger * 0.32,
     offsetY: offsetY + (Math.random() * 10 - 5),
@@ -809,15 +840,86 @@ function displaceUnit(source, target, deltaWorldUnits, options = {}) {
   return Math.round(Math.abs(actualDelta));
 }
 
+function getUbImpactProfile(caster) {
+  const action = caster?.ub?.action || '';
+  const kind = caster?.ub?.cutsceneKind || 'single_strike';
+  if (kind === 'ally_support' || ['ub_nozomi_idol_stage', 'ub_sanctuary_dew', 'ub_hourglass_paradox', 'ub_magic_barrier_all'].includes(action)) {
+    return { style: 'support', shake: 'none', zoom: 1.12, chromatic: false };
+  }
+  if (['ub_aegis_cataclysm', 'ub_llima_frontline_aoe'].includes(action)) {
+    return { style: 'slam', shake: 'vertical', zoom: 1.18, chromatic: true };
+  }
+  if (['ub_cataclysmic_meteor', 'ub_kyouka_cosmo_flash', 'ub_dawnstar_judgment'].includes(action)) {
+    return { style: 'magic', shake: 'horizontal', zoom: kind === 'aoe_offense' ? 1.14 : 1.28, chromatic: true };
+  }
+  return { style: 'slash', shake: 'horizontal', zoom: kind === 'aoe_offense' ? 1.15 : 1.30, chromatic: true };
+}
+
+function triggerUbImpactFrame(caster) {
+  const profile = getUbImpactProfile(caster);
+  const stage = document.getElementById('arena-stage');
+  const battleView = document.getElementById('battle-view');
+
+  // 1. Action-specific 2-3 frame impact strobe
+  const overlay = document.createElement('div');
+  overlay.className = `ub-impact-overlay is-${profile.style}`;
+  document.body.appendChild(overlay);
+  setTimeout(() => overlay.remove(), 170);
+
+  // 2. Outward impact burst lines centered on caster/target zone
+  const burst = document.createElement('div');
+  burst.className = 'ub-impact-burst';
+  const focusX = Number.isFinite(battle.cutscene?.cameraOriginX)
+    ? battle.cutscene.cameraOriginX
+    : Number.isFinite(caster?.visualX)
+    ? caster.visualX
+    : 50;
+  burst.style.left = `${focusX}%`;
+  burst.style.top = '58%';
+  document.body.appendChild(burst);
+  setTimeout(() => burst.remove(), 300);
+
+  // 3. Directional screen shake + chromatic split
+  if (battleView && profile.shake !== 'none') {
+    const shakeCls = profile.shake === 'vertical' ? 'ub-shake-vertical' : 'ub-shake-horizontal';
+    battleView.classList.remove('ub-shake-vertical', 'ub-shake-horizontal');
+    void battleView.offsetWidth;
+    battleView.classList.add(shakeCls);
+    setTimeout(() => battleView.classList.remove(shakeCls), 260);
+  }
+  if (stage && profile.chromatic) {
+    stage.classList.add('ub-chromatic-hit');
+    setTimeout(() => stage.classList.remove('ub-chromatic-hit'), 130);
+  }
+
+  // 4. Micro-hitstop freeze for visceral impact weight
+  battle.hitstopTimer = Math.max(battle.hitstopTimer || 0, profile.style === 'support' ? 0.04 : 0.11);
+}
+
 function showUbCutscene(caster, affectedUnits = []) {
   const container = document.getElementById('ub-cutin-container');
   if (!container) return;
 
   const kind = caster.ub.cutsceneKind || 'single_strike';
   const isSupport = kind === 'ally_support';
+  const profile = getUbImpactProfile(caster);
   const durSec = Math.max(1.25, (caster.ub.windupSec || 0.48) * PACE_CONFIG.phaseDurationMultiplier + 0.55);
 
-  battle.cutscene = { remaining: durSec, casterUid: caster.uid };
+  // Compute dynamic camera framing midpoint (caster + affected targets)
+  const focusUnits = [caster, ...affectedUnits.filter((u) => u && u.alive)];
+  const avgX =
+    focusUnits.reduce((sum, u) => sum + (Number.isFinite(u.visualX) ? u.visualX : 50), 0) /
+    Math.max(1, focusUnits.length);
+  const cameraOriginX = Math.max(20, Math.min(80, avgX));
+
+  battle.cutscene = {
+    remaining: durSec,
+    casterUid: caster.uid,
+    affectedUids: affectedUnits.filter(Boolean).map((u) => u.uid),
+    cameraOriginX,
+    cameraScale: profile.zoom,
+    impactStyle: profile.style,
+  };
   // Pause other combatants while the Union Burst cutscene & impact play out
   state.ubPauseRemaining = Math.max(state.ubPauseRemaining, durSec * 0.85);
 
@@ -833,7 +935,10 @@ function showUbCutscene(caster, affectedUnits = []) {
 
   container.classList.remove('hidden');
   container.innerHTML = `
+    <div class="ub-letterbox-bar is-top"></div>
+    <div class="ub-letterbox-bar is-bottom"></div>
     <div class="ub-manga-dim relative w-full h-full flex items-center justify-center overflow-hidden">
+      <div class="ub-speedlines-windup"></div>
       <div class="ub-manga-band ${isSupport ? 'is-support' : ''} relative w-full h-44 sm:h-56 flex items-center justify-center px-6 sm:px-16 overflow-hidden" data-cutscene-dur="${durSec.toFixed(2)}s">
         <div class="relative z-10 max-w-5xl w-full flex ${isPlayer ? 'flex-row' : 'flex-row-reverse'} items-center justify-between gap-4 sm:gap-10">
           <div class="ub-manga-model ${modelDirClass} chibi-closeup-sprite shrink-0 drop-shadow-[0_12px_18px_rgba(0,0,0,0.65)]" data-cutscene-dur="${durSec.toFixed(2)}s">
@@ -876,8 +981,35 @@ function dealDamage(attacker, defender, rawMultiplier, damageType, options = {})
   const atkEff = getEffectiveStats(attacker);
   const defEff = getEffectiveStats(defender);
 
+  // Accuracy vs Dodge check (Physical attacks only; Magic attacks never miss)
+  if (damageType === 'physical' && !options.guaranteedHit) {
+    const hasBlind = attacker.debuffs.some((d) => d.type === 'blind');
+    const hasMissDebuff = attacker.debuffs.some((d) => d.type === 'miss');
+    let dodged = false;
+
+    if (hasMissDebuff) {
+      dodged = true;
+    } else {
+      const effAcc = hasBlind ? Math.max(0, atkEff.accuracy - 60) : atkEff.accuracy;
+      const evasionGap = defEff.dodge - effAcc;
+      if (evasionGap > 0) {
+        const dodgeChance = Math.min(0.65, evasionGap / (evasionGap + 100));
+        dodged = Math.random() < dodgeChance;
+      }
+    }
+
+    if (dodged) {
+      spawnPopup(defender, 'MISS', 'text-slate-200 font-extrabold text-sm sm:text-base', -16);
+      if (options.baseHitTp) {
+        gainTp(attacker, options.baseHitTp, false);
+      }
+      return 0;
+    }
+  }
+
   const currentAtk = damageType === 'physical' ? atkEff.patk : atkEff.matk;
-  const effectiveDef = Math.max(0, damageType === 'physical' ? defEff.pdef : defEff.mdef);
+  const pen = damageType === 'physical' ? atkEff.ppen : atkEff.mpen;
+  const effectiveDef = Math.max(0, (damageType === 'physical' ? defEff.pdef : defEff.mdef) - pen);
 
   // Base Damage = (Skill Multiplier * Current ATK) + (Skill Coefficient * (Skill Level + 1)) + Conditional Bonus
   const skillCoeff = options.skillCoeff || 0;
@@ -920,6 +1052,20 @@ function dealDamage(attacker, defender, rawMultiplier, damageType, options = {})
   defender.hp = Math.max(0, defender.hp - finalDmg);
   attacker.statsTracked.damageDealt += finalDmg;
   defender.statsTracked.damageTaken += mitigatedDmg;
+
+  if (finalDmg > 0 && attacker.hpReduceRate > 0 && attacker.alive) {
+    const absorbHeal = Math.floor(finalDmg * (attacker.hpReduceRate / 1000));
+    if (absorbHeal > 0) {
+      attacker.hp = Math.min(attacker.maxHp, attacker.hp + absorbHeal);
+    }
+  }
+
+  if (finalDmg > 0 && attacker.hpReduceRate > 0 && attacker.alive) {
+    const absorbHeal = Math.floor(finalDmg * (attacker.hpReduceRate / 1000));
+    if (absorbHeal > 0) {
+      attacker.hp = Math.min(attacker.maxHp, attacker.hp + absorbHeal);
+    }
+  }
 
   if (options.knockbackPos || options.knockbackPx) {
     const worldShift = options.knockbackPos ?? Math.round((options.knockbackPx || 0) * 2.5);
@@ -1015,15 +1161,6 @@ function grantPhysicalShield(caster, target, amount) {
   spawnPopup(target, `+${finalShield} P.WARD`, 'pcrd-num-shield font-mono-num text-lg sm:text-xl', -28);
 }
 
-function grantPhysicalShield(caster, target, amount) {
-  if (!target || !target.alive) return;
-  const eff = getEffectiveStats(caster);
-  const finalShield = Math.max(25, Math.round(amount * eff.healMult));
-  target.physicalShield += finalShield;
-  caster.statsTracked.shieldGranted += finalShield;
-  spawnPopup(target, `+${finalShield} P.WARD`, 'pcrd-num-shield font-mono-num text-lg sm:text-xl', -28);
-}
-
 function triggerUnionBurst(unit) {
   if (!battle.running || battle.ended || !unit || !unit.alive) return;
   if (unit.tp < MAX_TP) return;
@@ -1034,7 +1171,8 @@ function triggerUnionBurst(unit) {
     return;
   }
 
-  unit.tp = 0;
+  const tpRetained = Math.round(MAX_TP * Math.min(0.5, (unit.tpReduceRate || 0) / 100));
+  unit.tp = tpRetained;
   const ubWindup = Math.max(PACE_CONFIG.minWindupSec, (unit.ub.windupSec ?? 0.48) * PACE_CONFIG.phaseDurationMultiplier);
   const ubFollow = Math.max(PACE_CONFIG.minFollowThroughSec, (unit.ub.followThroughSec ?? 0.48) * PACE_CONFIG.phaseDurationMultiplier);
 
@@ -1063,6 +1201,8 @@ function triggerUnionBurst(unit) {
   unit.actionPhase = 'WINDUP';
   unit.phaseTimer = 0;
   unit.phaseDuration = ubWindup;
+  unit.activeAnimKey = 'ub';
+  unit.animProgress = 0;
   const ubBubbleDur = ubWindup + ubFollow + 0.65;
   unit.speechBubble = {
   text: unit.ub.callout || `★ ${unit.ub.name}!`,
@@ -1112,24 +1252,31 @@ function triggerUnionBurst(unit) {
   const followThroughSec = Math.max(PACE_CONFIG.minFollowThroughSec, baseFollow * PACE_CONFIG.phaseDurationMultiplier);
 
   unit.queuedAction = {
-  kind: 'skill',
-  stepKey: resolvedKey,
-  skillDef,
-  label: skillDef.name,
-  callout: skillDef.callout || skillDef.name,
-  windupSec,
-  followThroughSec,
+    kind: 'skill',
+    stepKey: resolvedKey,
+    skillDef,
+    label: skillDef.name,
+    callout: skillDef.callout || skillDef.name,
+    windupSec,
+    followThroughSec,
   };
   unit.actionPhase = 'WINDUP';
   unit.phaseTimer = 0;
   unit.phaseDuration = windupSec;
+  unit.activeAnimKey = resolvedKey;
+  unit.animProgress = 0;
   const isSkill = resolvedKey !== 'auto';
-  const bubbleLinger = isSkill ? windupSec + followThroughSec + 0.85 : windupSec + 0.55;
-  unit.speechBubble = {
-  text: skillDef.callout || skillDef.name,
-  isUb: false,
-  ttl: bubbleLinger,
-  };
+  const showBubble = isSkill || Math.random() < 0.025;
+  if (showBubble) {
+    const bubbleLinger = isSkill ? windupSec + followThroughSec + 0.85 : windupSec + 0.55;
+    unit.speechBubble = {
+      text: skillDef.callout || skillDef.name,
+      isUb: false,
+      ttl: bubbleLinger,
+    };
+  } else {
+    unit.speechBubble = null;
+  }
   setUnitAnim(unit, 'windup', windupSec);
   if (isSkill && typeof playUnitSkillVo === 'function') {
     playUnitSkillVo(unit, resolvedKey, skillDef, false);
@@ -1174,10 +1321,40 @@ function triggerUnionBurst(unit) {
   renderAllUI();
   }
 
-function executeActionCode(unit, actionCode, skillLabel, isUb) {
+function updateUnitFacing(unit, target) {
+  if (!unit || !target || typeof target.posX !== 'number' || typeof unit.posX !== 'number') return;
+  const diff = target.posX - unit.posX;
+  if (diff !== 0) {
+    unit.facingDir = Math.sign(diff);
+  }
+}
+
+function moveUnitToTarget(unit, target, options = {}) {
+  if (!unit || !target || typeof target.posX !== 'number') return;
   const dir = unit.side === 'player' ? 1 : -1;
+  const offset = typeof options.offset === 'number' ? options.offset : 72;
+  const destX = options.behind ? target.posX + dir * offset : target.posX - dir * offset;
+  if (options.fxColor) {
+    spawnFx('aoe', unit, unit, options.fxColor);
+  }
+  unit.posX = Math.max(-920, Math.min(920, destX));
+  updateUnitFacing(unit, target);
+  if (options.popup) {
+    spawnPopup(unit, options.popup, options.popupClass || 'text-cyan-300 font-extrabold text-xs', -26);
+  }
+}
+
+function executeActionCode(unit, actionCode, skillLabel, isUb) {
+  const nearestTarget = selectTargets(unit, 'nearest', 1)[0];
+  if (nearestTarget) updateUnitFacing(unit, nearestTarget);
+  const dir = typeof unit.facingDir === 'number' ? unit.facingDir : unit.side === 'player' ? 1 : -1;
   unit.lungeOffset = dir * (isUb ? 26 : 16);
   setUnitAnim(unit, 'strike', isUb ? 0.45 : 0.32);
+
+  if (isUb) {
+    battle.activeUbPopupScale = true;
+    triggerUbImpactFrame(unit);
+  }
 
   const skillKey = isUb
     ? 'ub'
@@ -1296,6 +1473,7 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
       unit.buffs.push({ type: 'pdefUp', val: sk.pdefPct || 0.40, remaining: 7 });
       spawnPopup(unit, '+PDEF', 'text-sky-300 font-bold text-xs', -22);
       if (t) {
+        moveUnitToTarget(unit, t, { offset: 70, fxColor: '#f472b6', popup: 'CHARGE!', popupClass: 'text-pink-300 font-extrabold text-xs' });
         spawnFx('slash', unit, t, '#f472b6');
         const d = dealDamage(unit, t, sk.mult || 1.60, 'physical', {
           knockbackPos: 65,
@@ -1348,6 +1526,9 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
     case 'phys_highest_matk_debuff': {
       const [t] = selectTargets(unit, 'highest_matk', 1);
       if (t) {
+        if (unit.positionZone !== 'backline') {
+          moveUnitToTarget(unit, t, { offset: 72, fxColor: '#c084fc', popup: 'POUNCE!', popupClass: 'text-purple-300 font-extrabold text-xs' });
+        }
         spawnFx('slash', unit, t, '#c084fc');
         const d = dealDamage(unit, t, sk.mult || 1.55, 'physical', {
           baseHitTp: sk.baseHitTp || 112,
@@ -1419,6 +1600,9 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
     case 'flank_shred_strike': {
       const [t] = selectTargets(unit, 'flank_or_back', 1);
       if (t) {
+        if (unit.positionZone !== 'backline') {
+          moveUnitToTarget(unit, t, { offset: 72, behind: true, fxColor: '#22d3ee', popup: 'BLINK!' });
+        }
         spawnFx('slash', unit, t, '#22d3ee');
         const d = dealDamage(unit, t, sk.mult || 1.3, 'physical', {
           baseHitTp: sk.baseHitTp || 112,
@@ -1434,7 +1618,8 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
     case 'buff_self_def_shield': {
       spawnFx('aoe', unit, unit, '#38bdf8');
       unit.buffs.push({ type: 'defUp', val: sk.defPct || 0.35, remaining: 6 });
-      grantShield(unit, unit, unit.matk * (sk.shieldMult || 1.3) + 180);
+      const baseShield = unit.matk > 0 ? unit.matk * (sk.shieldMult || 1.3) + 180 : unit.maxHp * 0.14 * (sk.shieldMult || 1.3);
+      grantShield(unit, unit, baseShield);
       gainTp(unit, sk.tpBoost || 110, true);
       addLog('skill', `${unit.name} activated ${skillLabel} (+DEF, Shield & TP).`);
       break;
@@ -1531,14 +1716,15 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
           label: skillLabel,
         });
         if (t.alive) {
+          const burnSec = Math.round(sk.burnDuration || 4);
           t.debuffs.push({
             type: 'burn',
-            val: Math.max(25, Math.round(unit.matk * (sk.burnMult || 0.45))),
-            remaining: 4.0,
+            val: 0.04,
+            remaining: burnSec,
             tickTimer: 1.0,
           });
         }
-        addLog('skill', `${unit.name} hit ${t.name} with ${skillLabel} for ${d} DMG + Burn.`);
+        addLog('skill', `${unit.name} hit ${t.name} with ${skillLabel} for ${d} DMG + Burn (${Math.round(sk.burnDuration || 4)}s).`);
       });
       break;
     }
@@ -1585,20 +1771,20 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
     }
     case 'ub_aegis_cataclysm': {
       const targets = selectTargets(unit, 'nearest', 3);
+      const hasStun = Boolean(unit.ub?.desc && unit.ub.desc.toLowerCase().includes('stun'));
       spawnFx('aoe', unit, targets[0] || unit, '#f59e0b');
       targets.forEach((t, idx) => {
         dealDamage(unit, t, 2.25, 'physical', {
-          knockbackPos: idx === 0 ? 75 : 40,
-          knockbackPx: idx === 0 ? 30 : 16,
-          knockbackDuration: 0.4,
-          silentDisplacementPopup: true,
-          ccType: idx === 0 ? 'stun' : null,
+          ccType: hasStun && idx === 0 ? 'stun' : null,
           ccDuration: 1.1,
         });
       });
       grantShield(unit, unit, unit.maxHp * 0.28);
       unit.buffs.push({ type: 'taunt', val: 1, remaining: 4.5 });
-      addLog('ub', `★ ${unit.name} unleashed ${skillLabel} (AOE DMG, Knockback, Stun, Barrier & Taunt)!`);
+      addLog(
+        'ub',
+        `★ ${unit.name} unleashed ${skillLabel} (AOE DMG${hasStun ? ', Stun' : ''}, Barrier & Taunt)!`
+      );
       break;
     }
     case 'ub_crimson_eclipse': {
@@ -1631,6 +1817,7 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
     case 'ub_phantom_severance': {
       const [t] = selectTargets(unit, 'lowest_hp', 1);
       if (t) {
+        moveUnitToTarget(unit, t, { offset: 68, behind: true, fxColor: '#22d3ee', popup: 'SHADOW BLINK!' });
         spawnFx('beam', unit, t, '#22d3ee');
         const d = dealDamage(unit, t, 2.90, 'physical', {
           bonusCrit: 0.25,
@@ -1647,6 +1834,7 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
     case 'ub_tamaki_cat_strike': {
       const [t] = selectTargets(unit, 'highest_matk', 1);
       if (t) {
+        moveUnitToTarget(unit, t, { offset: 68, fxColor: '#c084fc', popup: 'POUNCE!', popupClass: 'text-purple-300 font-extrabold text-xs' });
         spawnFx('beam', unit, t, '#c084fc');
         const d = dealDamage(unit, t, 3.05, 'physical', {
           bonusCrit: 0.20,
@@ -1695,10 +1883,11 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
         dealDamage(unit, e, 2.40, 'magical', { bonusCrit: 0.15 });
         if (e.alive) {
           e.debuffs.push({ type: 'mdefDown', val: 0.25, remaining: 6 });
+          const burnSec = Math.round(unit.ub?.burnDuration || 5);
           e.debuffs.push({
             type: 'burn',
-            val: Math.max(35, Math.round(unit.matk * 0.55)),
-            remaining: 4.5,
+            val: 0.04,
+            remaining: burnSec,
             tickTimer: 1.0,
           });
         }
@@ -1774,7 +1963,7 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
         spawnFx('orb', unit, a, '#2dd4bf');
         healUnit(unit, a, unit.matk * 1.90, skillLabel);
         grantShield(unit, a, unit.matk * 1.10);
-        a.debuffs = a.debuffs.filter((d) => !['burn', 'defDown', 'mdefDown', 'slow', 'silence'].includes(d.type));
+        a.debuffs = a.debuffs.filter((d) => !['burn', 'poison', 'bleed', 'windShear', 'defDown', 'mdefDown', 'slow', 'silence'].includes(d.type));
       });
       addLog('ub', `★ ${unit.name} blessed the team with ${skillLabel} (Mass heal, barrier & cleanse)!`);
       break;
@@ -1789,6 +1978,7 @@ function executeActionCode(unit, actionCode, skillLabel, isUb) {
       break;
     }
   }
+  battle.activeUbPopupScale = false;
 }
 
 function updateBuffsAndDebuffs(unit, dt) {
@@ -1801,22 +1991,31 @@ function updateBuffsAndDebuffs(unit, dt) {
     }
   }
 
+  const DOT_META = {
+    burn: { label: 'BURN', name: 'Burn', cls: 'text-orange-400 font-bold text-[11px]' },
+    poison: { label: 'POISON', name: 'Poison', cls: 'text-emerald-400 font-bold text-[11px]' },
+    bleed: { label: 'BLEED', name: 'Bleed', cls: 'text-rose-400 font-bold text-[11px]' },
+    windShear: { label: 'WIND SHEAR', name: 'Wind Shear', cls: 'text-teal-300 font-bold text-[11px]' },
+  };
+
   for (let i = unit.debuffs.length - 1; i >= 0; i--) {
     const d = unit.debuffs[i];
-    if (d.type === 'burn') {
+    const dotInfo = DOT_META[d.type];
+    if (dotInfo) {
       d.tickTimer = (d.tickTimer ?? 1.0) - dt;
       if (d.tickTimer <= 0) {
         d.tickTimer += 1.0;
-        const burnDmg = Math.max(10, Math.round(d.val));
-        unit.hp = Math.max(0, unit.hp - burnDmg);
-        spawnPopup(unit, `${burnDmg} BURN`, 'text-orange-400 font-bold text-[11px]', 6);
+        // All DoTs deal a fixed 4% of the target's current HP per 1s tick
+        const dotDmg = Math.max(1, Math.round(unit.hp * 0.04));
+        unit.hp = Math.max(0, unit.hp - dotDmg);
+        spawnPopup(unit, `${dotDmg} ${dotInfo.label}`, dotInfo.cls, 6);
         if (unit.hp <= 0 && unit.alive) {
           unit.alive = false;
           unit.actionPhase = 'IDLE';
           unit.queuedAction = null;
           unit.speechBubble = null;
           spawnPopup(unit, 'KO!', 'text-red-500 font-extrabold text-sm', -18);
-          addLog('ko', `💀 ${unit.name} succumbed to Burn!`);
+          addLog('ko', `💀 ${unit.name} succumbed to ${dotInfo.name}!`);
         }
       }
     }
@@ -1853,19 +2052,26 @@ if (!battle.running || battle.ended || state.paused) return;
 
 if (battle.entranceTimer > 0) {
   battle.entranceTimer = Math.max(0, battle.entranceTimer - rawDt);
+  for (const u of battle.units) {
+    if (u.alive) {
+      u.activeAnimKey = 'walk';
+      u.rigIdleTime = (u.rigIdleTime || 0) + rawDt * 2.4;
+    }
+  }
   updateFrontShiftAndVisualPositions(rawDt, true);
   return;
 }
 
 if (battle.cutscene && battle.cutscene.remaining > 0) {
-battle.cutscene.remaining = Math.max(0, battle.cutscene.remaining - rawDt);
-if (battle.cutscene.remaining === 0) {
-const el = document.getElementById('ub-cutin-container');
-if (el) {
-el.innerHTML = '';
-el.classList.add('hidden');
-}
-}
+  battle.cutscene.remaining = Math.max(0, battle.cutscene.remaining - rawDt);
+  if (battle.cutscene.remaining === 0) {
+    const el = document.getElementById('ub-cutin-container');
+    if (el) {
+      el.innerHTML = '';
+      el.classList.add('hidden');
+    }
+  }
+  return;
 }
 
 if (battle.hitstopTimer > 0) {
@@ -1884,22 +2090,24 @@ u.speechBubble.ttl -= rawDt * 0.5;
 if (u.speechBubble.ttl <= 0) u.speechBubble = null;
 }
 if (u.queuedAction?.kind === 'ub' && u.actionPhase === 'WINDUP') {
-u.phaseTimer += rawDt * 0.65;
-if (u.phaseTimer >= u.phaseDuration && u.queuedAction) {
-const act = u.queuedAction;
-u.speechBubble = {
-text: act.callout || act.label,
-isUb: true,
-ttl: act.followThroughSec + 0.65,
-};
-executeActionCode(u, act.skillDef.action, act.label, true);
-u.actionPhase = 'FOLLOWTHROUGH';
-u.phaseTimer = 0;
-u.phaseDuration = act.followThroughSec;
-u.queuedAction = null;
-state.ubPauseRemaining = 0;
-checkBattleEnd();
-}
+  u.phaseTimer += rawDt * 0.65;
+  u.animProgress = u.phaseDuration > 0 ? Math.min(0.5, (u.phaseTimer / u.phaseDuration) * 0.5) : 0;
+  if (u.phaseTimer >= u.phaseDuration && u.queuedAction) {
+    const act = u.queuedAction;
+    u.speechBubble = {
+      text: act.callout || act.label,
+      isUb: true,
+      ttl: act.followThroughSec + 0.65,
+    };
+    executeActionCode(u, act.skillDef.action, act.label, true);
+    u.actionPhase = 'FOLLOWTHROUGH';
+    u.phaseTimer = 0;
+    u.phaseDuration = act.followThroughSec;
+    u.animProgress = 0.5;
+    u.queuedAction = null;
+    state.ubPauseRemaining = 0;
+    checkBattleEnd();
+  }
 }
 }
 updateFrontShiftAndVisualPositions(rawDt * 0.35);
@@ -1934,9 +2142,14 @@ if (!u.alive) continue;
     const eff = getEffectiveStats(u);
 
     if (u.actionPhase === 'IDLE') {
+      u.activeAnimKey = u.animState === 'walk' ? 'walk' : 'idle';
+      u.animProgress = 0;
+      u.rigIdleTime = (u.rigIdleTime || 0) + dt * 2.4;
+
       // Only charge action gauge when a target is within the unit's position attack range
       if (isTargetInRange(u)) {
-        u.actionGauge += u.actionSpeed * eff.hasteMult * dt * 100 * PACE_CONFIG.idleGaugeMultiplier;
+        const atkInterval = Math.max(0.5, u.actionSpeed || 2.0);
+        u.actionGauge += (100 / atkInterval) * eff.hasteMult * dt * PACE_CONFIG.idleGaugeMultiplier;
         if (u.actionGauge >= 100) {
           u.actionGauge = 0;
           stepPredeterminedLoop(u);
@@ -1948,6 +2161,7 @@ if (!u.alive) continue;
         PACE_CONFIG.windupBaseRate + (eff.hasteMult - 1) * 0.4
       );
       u.phaseTimer += dt * windupRate;
+      u.animProgress = u.phaseDuration > 0 ? Math.min(0.5, (u.phaseTimer / u.phaseDuration) * 0.5) : 0;
 
       if (u.phaseTimer >= u.phaseDuration && u.queuedAction) {
         const act = u.queuedAction;
@@ -1957,16 +2171,20 @@ if (!u.alive) continue;
         u.actionPhase = 'FOLLOWTHROUGH';
         u.phaseTimer = 0;
         u.phaseDuration = act.followThroughSec;
+        u.animProgress = 0.5;
         u.queuedAction = null;
         checkBattleEnd();
       }
     } else if (u.actionPhase === 'FOLLOWTHROUGH') {
       u.phaseTimer += dt;
+      u.animProgress = u.phaseDuration > 0 ? Math.min(1, 0.5 + (u.phaseTimer / u.phaseDuration) * 0.5) : 1;
       if (u.phaseTimer >= u.phaseDuration) {
         u.actionPhase = 'IDLE';
         u.phaseTimer = 0;
         u.phaseDuration = 0;
         u.actionGauge = 0;
+        u.activeAnimKey = 'idle';
+        u.animProgress = 0;
       }
     }
   }

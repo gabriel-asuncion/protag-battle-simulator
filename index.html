@@ -113,12 +113,18 @@
           <button data-draft-filter="middle" class="draft-filter-btn px-3.5 py-1 rounded-full text-xs font-extrabold bg-white text-slate-700 border border-slate-300 hover:bg-slate-50">Middle</button>
           <button data-draft-filter="back" class="draft-filter-btn px-3.5 py-1 rounded-full text-xs font-extrabold bg-white text-slate-700 border border-slate-300 hover:bg-slate-50">Back</button>
         </div>
-        <div class="flex items-center gap-2">
-          <button id="preset-balanced-btn" class="px-3 py-1 rounded-full text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-xs">
-            Balanced
-          </button>
-          <button id="preset-rush-btn" class="px-3 py-1 rounded-full text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-xs">
-            Aggro Dive
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <span class="text-[11px] font-extrabold text-slate-500 uppercase tracking-wide">Auto-Draft:</span>
+          <select id="draft-strategy-select" class="px-2.5 py-1 rounded-full text-xs font-bold bg-white text-slate-700 border border-slate-300 shadow-xs">
+            <option value="balanced">Balanced (Tank + DPS + Supp)</option>
+            <option value="aggro_dive">Aggro Dive (Frontline Rush)</option>
+            <option value="magic_burst">Magic Burst (Mage Cleave)</option>
+            <option value="sustain_stall">Sustain / Stall (Double Tank + Heal)</option>
+            <option value="anti_mage">Anti-Mage Disruption</option>
+            <option value="random">Full Random</option>
+          </select>
+          <button id="draft-strategy-pick-btn" class="px-3 py-1 rounded-full text-xs font-extrabold bg-blue-600 hover:bg-blue-500 text-white shadow-xs transition active:scale-95">
+            🎲 Pick Team
           </button>
         </div>
       </div>
@@ -169,11 +175,14 @@
     <!-- Ground / Battlefield Terrain -->
     <div class="arena-floor pointer-events-none absolute inset-x-0 bottom-0 h-[48%] border-t border-sky-200/25 z-0"></div>
 
-    <!-- Minimal Top HUD matching image_d4ea5b.jpg (Timer + MENU Top Right) -->
-    <div class="relative z-20 px-4 sm:px-6 pt-3 flex items-start justify-end pointer-events-none">
+    <!-- Top HUD: Enemy AI Profiles (Top Left, AI Battles Only) + Timer & MENU (Top Right) -->
+    <div class="relative z-20 px-4 sm:px-6 pt-3 flex items-start justify-between gap-3 pointer-events-none">
+      <div id="enemy-ub-deck-wrap" class="pointer-events-auto max-w-[68vw] overflow-x-auto">
+        <div id="enemy-ub-deck" class="flex items-start gap-2 sm:gap-2.5"></div>
+      </div>
       <span id="hud-mode-label" class="hidden">4v4</span>
       <span id="battle-status-pill" class="hidden">LIVE</span>
-      <div class="flex items-center gap-2.5 pointer-events-auto">
+      <div class="flex items-center gap-2.5 shrink-0 pointer-events-auto">
         <div class="pcrd-timer-pill rounded-full px-3.5 py-1.5 flex items-center gap-2 shadow-lg">
           <span class="text-amber-300 text-xs">⏳</span>
           <span id="battle-timer" class="font-mono-num text-xs sm:text-sm font-extrabold text-white">01:30</span>
@@ -302,6 +311,66 @@
     </div>
   </div>
 
+  <!-- Full-Screen PCRD Character Viewer Overlay -->
+  <div id="character-viewer-modal" class="hidden fixed inset-0 z-50 pcrd-viewer-bg flex flex-col overflow-hidden select-none">
+    <!-- Top Header Bar -->
+    <div class="relative z-20 px-4 sm:px-8 pt-3 sm:pt-4 pb-2 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <button id="close-character-viewer-btn" class="pcrd-back-btn w-11 h-11 rounded-2xl flex items-center justify-center text-sky-900 font-black text-xl shadow-lg hover:brightness-105 active:scale-95 transition" title="Back">
+          ↩
+        </button>
+        <div>
+          <h2 id="viewer-header-title" class="pcrd-viewer-heading font-display text-xl sm:text-2xl font-extrabold tracking-wide leading-tight">
+            Characters
+          </h2>
+          <div class="h-1 w-40 rounded-full bg-gradient-to-r from-amber-400 via-yellow-300 to-transparent mt-0.5"></div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button id="viewer-grid-btn" class="hidden px-3.5 py-1.5 rounded-full bg-white/90 hover:bg-white border-2 border-sky-300 text-sky-800 text-xs font-extrabold shadow transition">
+          ☰ Character List
+        </button>
+        <span id="viewer-counter-pill" class="px-3 py-1 rounded-full bg-slate-900/75 border border-amber-300/70 text-amber-200 font-mono-num text-xs font-extrabold shadow">
+          24 Fighters
+        </span>
+      </div>
+    </div>
+
+    <!-- Main Content (Grid Selection or Split Detail View) -->
+    <div id="character-viewer-body" class="relative z-10 flex-1 max-w-[1360px] w-full mx-auto px-4 sm:px-8 pb-5 pt-2 flex flex-col lg:flex-row items-stretch gap-5 overflow-y-auto lg:overflow-hidden">
+      <!-- Populated dynamically by renderCharacterViewer() -->
+    </div>
+  </div>
+
+  <!-- Interactive Skill Preview Modal -->
+  <div id="skill-preview-modal" class="hidden fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 select-none">
+    <div class="w-full max-w-3xl rounded-3xl overflow-hidden border-2 border-amber-300/90 bg-slate-900 shadow-2xl flex flex-col">
+      <div class="px-5 py-3 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between gap-3">
+        <div>
+          <div id="skill-preview-title" class="font-display text-base sm:text-lg font-extrabold text-amber-300">Skill Preview</div>
+          <div id="skill-preview-subtitle" class="text-[11px] text-slate-300"></div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="replay-skill-preview-btn" class="px-3 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-extrabold text-xs shadow transition">
+            ↻ Replay
+          </button>
+          <button id="close-skill-preview-btn" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold text-xs transition">
+            Close
+          </button>
+        </div>
+      </div>
+
+      <div id="skill-preview-stage" class="relative w-full h-72 sm:h-80 arena-bg overflow-hidden">
+        <div class="arena-floor pointer-events-none absolute inset-x-0 bottom-0 h-[48%] border-t border-sky-200/25"></div>
+        <div id="skill-preview-units" class="absolute inset-0 z-10"></div>
+        <div id="skill-preview-fx" class="absolute inset-0 z-20 pointer-events-none overflow-hidden"></div>
+      </div>
+
+      <div id="skill-preview-desc" class="px-5 py-3 bg-slate-950/90 border-t border-slate-800 text-xs text-slate-300 leading-relaxed"></div>
+    </div>
+  </div>
+
   <!-- Roster & Kit Codex Modal -->
   <div id="codex-modal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-4xl w-full max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
@@ -321,31 +390,31 @@
   <script src="js/sprites.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/roster.js"></script>
-  <script src="js/roster/bram_ironclad.js"></script>
-  <script src="js/roster/kaelen_ashblade.js"></script>
-  <script src="js/roster/vespera_nightstep.js"></script>
-  <script src="js/roster/sylas_sunweaver.js"></script>
-  <script src="js/roster/mirella_hexthread.js"></script>
-  <script src="js/roster/orin_pyrecaster.js"></script>
-  <script src="js/roster/lyra_windpiercer.js"></script>
-  <script src="js/roster/talia_dewsong.js"></script>
-  <script src="js/roster/garrick_stoneguard.js"></script>
-  <script src="js/roster/seraphina_dawnblade.js"></script>
-  <script src="js/roster/zephyr_shadowstep.js"></script>
-  <script src="js/roster/aurelia_starcaller.js"></script>
-  <script src="js/roster/corvus_voidweaver.js"></script>
-  <script src="js/roster/ignis_emberheart.js"></script>
-  <script src="js/roster/sylvia_frostbow.js"></script>
-  <script src="js/roster/elara_moonbloom.js"></script>
-  <script src="js/roster/yukari.js"></script>
-  <script src="js/roster/ninon.js"></script>
-  <script src="js/roster/llima.js"></script>
-  <script src="js/roster/nozomi.js"></script>
-  <script src="js/roster/tamaki.js"></script>
-  <script src="js/roster/monica.js"></script>
-  <script src="js/roster/kyouka.js"></script>
-  <script src="js/roster/tsumugi.js"></script>
-  <script src="js/roster/training_dummy.js"></script>
+  <script src="js/roster/bram_ironclad/bram_ironclad.js"></script>
+  <script src="js/roster/kaelen_ashblade/kaelen_ashblade.js"></script>
+  <script src="js/roster/vespera_nightstep/vespera_nightstep.js"></script>
+  <script src="js/roster/sylas_sunweaver/sylas_sunweaver.js"></script>
+  <script src="js/roster/mirella_hexthread/mirella_hexthread.js"></script>
+  <script src="js/roster/orin_pyrecaster/orin_pyrecaster.js"></script>
+  <script src="js/roster/lyra_windpiercer/lyra_windpiercer.js"></script>
+  <script src="js/roster/talia_dewsong/talia_dewsong.js"></script>
+  <script src="js/roster/garrick_stoneguard/garrick_stoneguard.js"></script>
+  <script src="js/roster/seraphina_dawnblade/seraphina_dawnblade.js"></script>
+  <script src="js/roster/zephyr_shadowstep/zephyr_shadowstep.js"></script>
+  <script src="js/roster/aurelia_starcaller/aurelia_starcaller.js"></script>
+  <script src="js/roster/corvus_voidweaver/corvus_voidweaver.js"></script>
+  <script src="js/roster/ignis_emberheart/ignis_emberheart.js"></script>
+  <script src="js/roster/sylvia_frostbow/sylvia_frostbow.js"></script>
+  <script src="js/roster/elara_moonbloom/elara_moonbloom.js"></script>
+  <script src="js/roster/yukari/yukari.js"></script>
+  <script src="js/roster/ninon/ninon.js"></script>
+  <script src="js/roster/llima/llima.js"></script>
+  <script src="js/roster/nozomi/nozomi.js"></script>
+  <script src="js/roster/tamaki/tamaki.js"></script>
+  <script src="js/roster/monica/monica.js"></script>
+  <script src="js/roster/kyouka/kyouka.js"></script>
+  <script src="js/roster/tsumugi/tsumugi.js"></script>
+  <script src="js/roster/training_dummy/training_dummy.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/main.js"></script>

@@ -34,6 +34,30 @@ const PACE_CONFIG = {
 const CHARACTER_TEMPLATES = [];
 let TRAINING_DUMMY_TEMPLATE = null;
 
+function getCharacterFolderBase(id) {
+  return `js/roster/${id}`;
+}
+
+function getCharacterAssetsDir(id) {
+  return `${getCharacterFolderBase(id)}/assets`;
+}
+
+function getCharacterVfxDir(id) {
+  return `${getCharacterFolderBase(id)}/sound_files/vfx`;
+}
+
+function getCharacterVoiceDir(id) {
+  return `${getCharacterFolderBase(id)}/sound_files/voice`;
+}
+
+function getCharacterVfxPath(id, filename) {
+  return `${getCharacterVfxDir(id)}/${filename}`;
+}
+
+function getCharacterVoicePath(id, filename) {
+  return `${getCharacterVoiceDir(id)}/${filename}`;
+}
+
 function registerCharacterTemplate(template) {
   if (template.id === 'training_dummy') {
     TRAINING_DUMMY_TEMPLATE = template;

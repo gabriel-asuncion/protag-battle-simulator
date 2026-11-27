@@ -433,7 +433,8 @@ function loadChibiSpriteSheet() {
 
 function renderFallbackChibiSVG(unit, isVictory = false) {
   const id = unit.templateId;
-  const flip = unit.side === 'enemy' ? 'transform="scale(-1, 1)" transform-origin="32 32"' : '';
+  const isFacingLeft = typeof unit.facingDir === 'number' ? unit.facingDir < 0 : unit.side === 'enemy';
+  const flip = isFacingLeft ? 'transform="scale(-1, 1)" transform-origin="32 32"' : '';
 
   const palettes = {
     bram_ironclad: { primary: '#64748b', secondary: '#cbd5e1', accent: '#38bdf8', trim: '#f59e0b' },
@@ -478,7 +479,135 @@ function renderFallbackChibiSVG(unit, isVictory = false) {
   `;
 }
 
+const rigPartProcessedCache = new Map();
+
+function processKeyedAndTrimmedPart(img) {
+  try {
+    const keyed = keyOutGreenScreenCanvas(img);
+    if (!keyed) return null;
+
+    const sw = keyed.width;
+    const sh = keyed.height;
+    const ctx = keyed.getContext('2d');
+    const px = ctx.getImageData(0, 0, sw, sh).data;
+
+    let minX = sw;
+    let minY = sh;
+    let maxX = -1;
+    let maxY = -1;
+
+    for (let y = 0; y < sh; y++) {
+      for (let x = 0; x < sw; x++) {
+        if (px[(y * sw + x) * 4 + 3] > 20) {
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+
+    if (maxX < minX || maxY < minY) {
+      return { dataUrl: keyed.toDataURL('image/png'), width: sw, height: sh };
+    }
+
+    const cw = Math.max(1, maxX - minX + 1);
+    const ch = Math.max(1, maxY - minY + 1);
+    const trimCanvas = document.createElement('canvas');
+    trimCanvas.width = cw;
+    trimCanvas.height = ch;
+    const trimCtx = trimCanvas.getContext('2d');
+    trimCtx.imageSmoothingEnabled = true;
+    trimCtx.drawImage(keyed, minX, minY, cw, ch, 0, 0, cw, ch);
+
+    return {
+      dataUrl: trimCanvas.toDataURL('image/png'),
+      width: cw,
+      height: ch,
+    };
+  } catch (_) {
+    return {
+      dataUrl: img.src,
+      width: img.naturalWidth || img.width || 64,
+      height: img.naturalHeight || img.height || 64,
+    };
+  }
+}
+
+function getRigPartEntry(src, onLoad = null) {
+  if (!src) return null;
+  let entry = rigPartProcessedCache.get(src);
+  if (!entry) {
+    const img = new Image();
+    if (src.startsWith('http')) img.crossOrigin = 'anonymous';
+    entry = { status: 'loading', img, dataUrl: null, width: 0, height: 0, callbacks: [] };
+    if (typeof onLoad === 'function') entry.callbacks.push(onLoad);
+
+    img.onload = () => {
+      const processed = processKeyedAndTrimmedPart(img);
+      if (processed) {
+        entry.status = 'ready';
+        entry.dataUrl = processed.dataUrl;
+        entry.width = processed.width;
+        entry.height = processed.height;
+      } else {
+        entry.status = 'failed';
+      }
+      const cbs = [...entry.callbacks];
+      entry.callbacks = [];
+      cbs.forEach((fn) => {
+        try {
+          fn();
+        } catch (_) {}
+      });
+    };
+    img.onerror = () => {
+      entry.status = 'failed';
+      entry.callbacks = [];
+    };
+    rigPartProcessedCache.set(src, entry);
+    img.src = src;
+    return null;
+  }
+
+  if (entry.status === 'loading') {
+    if (typeof onLoad === 'function') entry.callbacks.push(onLoad);
+    return null;
+  }
+  return entry.status === 'ready' ? entry : null;
+}
+
+function hasCharacterRig(templateId) {
+  const tpl = typeof getTemplateById === 'function' ? getTemplateById(templateId) : null;
+  const rig = tpl?.rig;
+  if (!rig || !rig.parts || !rig.animations) return false;
+  const assetsDir = rig.assetsDir || `js/roster/${templateId}/assets`;
+  for (const partCfg of Object.values(rig.parts)) {
+    const entry = getRigPartEntry(`${assetsDir}/${partCfg.file}`);
+    if (!entry) return false;
+  }
+  return true;
+}
+
 function renderCharacterHeadSprite(unit) {
+  const tpl = typeof getTemplateById === 'function' ? getTemplateById(unit.templateId) : null;
+  if (tpl?.rig?.parts?.head) {
+    const assetsDir = tpl.rig.assetsDir || `js/roster/${unit.templateId}/assets`;
+    const headEntry = getRigPartEntry(`${assetsDir}/${tpl.rig.parts.head.file}`, () => {
+      if (typeof renderAllUI === 'function') renderAllUI();
+    });
+    if (headEntry) {
+      return `
+        <img
+          src="${headEntry.dataUrl}"
+          alt="${unit.name}"
+          draggable="false"
+          class="w-full h-full object-contain select-none pointer-events-none drop-shadow-[0_2px_4px_rgba(0,0,0,0.65)]"
+        />
+      `;
+    }
+  }
+
   const headSrc = spriteSheetCache.headCutouts[unit.templateId];
   if (headSrc) {
     return `
@@ -493,12 +622,119 @@ function renderCharacterHeadSprite(unit) {
   return renderCharacterSpriteSVG(unit, false);
 }
 
+function renderRiggedCharacterParts(unit, isVictory = false) {
+  const tpl = typeof getTemplateById === 'function' ? getTemplateById(unit.templateId) : null;
+  const rig = tpl?.rig;
+  if (!rig || !rig.parts || !rig.animations) return null;
+
+  const assetsDir = rig.assetsDir || `js/roster/${unit.templateId}/assets`;
+  const partEntries = Object.entries(rig.parts);
+  if (!partEntries.length) return null;
+
+  const loadedParts = [];
+  for (const [partKey, partCfg] of partEntries) {
+    const src = `${assetsDir}/${partCfg.file}`;
+    const partData = getRigPartEntry(src, () => {
+      if (typeof renderAllUI === 'function') renderAllUI();
+    });
+    if (!partData) return null;
+    loadedParts.push({ partKey, partCfg, partData });
+  }
+
+  const requestedKey = unit.activeAnimKey || (unit.animState === 'walk' ? 'walk' : 'idle');
+  const animKey = rig.animations[requestedKey] ? requestedKey : 'idle';
+  const animDef = rig.animations[animKey] || rig.animations.idle;
+  const nowSec = typeof performance !== 'undefined' ? performance.now() / 1000 : 0;
+  const tVal =
+    animDef?.mode === 'loop'
+      ? typeof unit.rigIdleTime === 'number'
+        ? unit.rigIdleTime * ((animDef.speed || 2.4) / 2.4)
+        : nowSec * (animDef.speed || 2.4)
+      : typeof unit.animProgress === 'number'
+      ? unit.animProgress
+      : 0;
+
+  const sampled = typeof animDef?.sample === 'function' ? animDef.sample(tVal) : {};
+
+  // Compute world joint positions & rotations using parent -> child hierarchy
+  const worldMap = {};
+  const computeWorld = (partKey, visited = new Set()) => {
+    if (worldMap[partKey]) return worldMap[partKey];
+    if (visited.has(partKey)) return { x: 0, y: 0, rot: 0 };
+    visited.add(partKey);
+
+    const partCfg = rig.parts[partKey];
+    if (!partCfg) return { x: 0, y: 0, rot: 0 };
+
+    const delta = sampled?.[partKey] || { dx: 0, dy: 0, rot: 0 };
+    const localX = (partCfg.baseX || 0) + (delta.dx || 0);
+    const localY = (partCfg.baseY || 0) + (delta.dy || 0);
+    const localRot = delta.rot || 0;
+
+    if (partCfg.parent && rig.parts[partCfg.parent]) {
+      const parentWorld = computeWorld(partCfg.parent, visited);
+      const cosR = Math.cos(parentWorld.rot);
+      const sinR = Math.sin(parentWorld.rot);
+      const rotX = localX * cosR - localY * sinR;
+      const rotY = localX * sinR + localY * cosR;
+      const res = {
+        x: parentWorld.x + rotX,
+        y: parentWorld.y + rotY,
+        rot: parentWorld.rot + localRot,
+      };
+      worldMap[partKey] = res;
+      return res;
+    }
+
+    const res = { x: localX, y: localY, rot: localRot };
+    worldMap[partKey] = res;
+    return res;
+  };
+
+  for (const { partKey } of loadedParts) {
+    computeWorld(partKey);
+  }
+
+  const ordered = [...loadedParts].sort((a, b) => (a.partCfg.z || 0) - (b.partCfg.z || 0));
+  const isFacingLeft = typeof unit.facingDir === 'number' ? unit.facingDir < 0 : unit.side === 'enemy';
+  const flipAttr = isFacingLeft ? 'transform="scale(-1, 1)"' : '';
+  const winGlow = isVictory ? 'brightness-110' : '';
+  const viewBox = rig.viewBox || '-105 -198 210 212';
+
+  const partsSvg = ordered
+    .map(({ partKey, partCfg, partData }) => {
+      const wPos = worldMap[partKey] || { x: 0, y: 0, rot: 0 };
+      const px = typeof partCfg.pivot?.[0] === 'number' ? partCfg.pivot[0] : 0.5;
+      const py = typeof partCfg.pivot?.[1] === 'number' ? partCfg.pivot[1] : 0.5;
+      const scale = typeof partCfg.scale === 'number' ? partCfg.scale : 1;
+      const drawW = partData.width * scale;
+      const drawH = partData.height * scale;
+      const offsetX = -drawW * px;
+      const offsetY = -drawH * py;
+      const deg = ((wPos.rot || 0) * 180) / Math.PI;
+      return `<g transform="translate(${wPos.x.toFixed(2)}, ${wPos.y.toFixed(2)}) rotate(${deg.toFixed(2)})"><image href="${partData.dataUrl}" x="${offsetX.toFixed(2)}" y="${offsetY.toFixed(2)}" width="${drawW.toFixed(2)}" height="${drawH.toFixed(2)}" /></g>`;
+    })
+    .join('');
+
+  return `
+    <svg viewBox="${viewBox}" class="w-12 h-12 sm:w-14 sm:h-14 overflow-visible select-none pointer-events-none drop-shadow-[0_4px_8px_rgba(0,0,0,0.75)] ${winGlow}">
+      <g ${flipAttr}>
+        ${partsSvg}
+      </g>
+    </svg>
+  `;
+}
+
 function renderCharacterSpriteSVG(unit, isVictory = false) {
+  const riggedHtml = renderRiggedCharacterParts(unit, isVictory);
+  if (riggedHtml) return riggedHtml;
+
   const tplId = unit.templateId;
   const cutoutSrc = spriteSheetCache.cutouts[tplId];
 
   if (cutoutSrc) {
-    const flipClass = unit.side === 'enemy' ? '-scale-x-100' : '';
+    const isFacingLeft = typeof unit.facingDir === 'number' ? unit.facingDir < 0 : unit.side === 'enemy';
+    const flipClass = isFacingLeft ? '-scale-x-100' : '';
     const winGlow = isVictory ? 'brightness-110' : '';
     return `
       <img
@@ -512,6 +748,5 @@ function renderCharacterSpriteSVG(unit, isVictory = false) {
 
   return renderFallbackChibiSVG(unit, isVictory);
 }
-
 loadChibiSpriteSheet(0);
 loadActionFxSheet(0);
